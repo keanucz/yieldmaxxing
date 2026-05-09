@@ -29,7 +29,7 @@ export default function App() {
       if (e.shiftKey && (e.key === "R" || e.key === "r") && e.metaKey === false && e.ctrlKey === false) {
         if (confirm("Reset YieldMaxxing demo state?")) {
           useFarmStore.getState().reset();
-          localStorage.removeItem("cropguard.farm.v1");
+          localStorage.removeItem("yieldmaxxing.farm.v1");
           location.href = "/";
         }
       }

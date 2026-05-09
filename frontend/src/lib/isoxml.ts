@@ -102,7 +102,7 @@ function buildTaskDataXML(field: Field, rx: Prescription): string {
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <ISO11783_TaskData VersionMajor="4" VersionMinor="3"
-                   ManagementSoftwareManufacturer="CropGuard"
+                   ManagementSoftwareManufacturer="YieldMaxxing"
                    ManagementSoftwareVersion="1.0"
                    DataTransferOrigin="1">
   <CTR A="CTR1" B="${escapeAttr(field.name + " owner")}"/>

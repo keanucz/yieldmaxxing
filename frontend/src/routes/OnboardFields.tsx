@@ -6,20 +6,49 @@ import { detectFields } from "../lib/mock/crome";
 import { ringAreaHa } from "../lib/geo";
 import type { FieldFeature } from "../types";
 
+const API = import.meta.env.VITE_API_URL || "http://localhost:9847";
+
 export default function OnboardFields() {
   const navigate = useNavigate();
   const center = useMemo<[number, number]>(() => {
-    const raw = sessionStorage.getItem("cropguard.onboard.center");
+    const raw = sessionStorage.getItem("yieldmaxxing.onboard.center");
     return raw ? (JSON.parse(raw) as [number, number]) : [53.073, -0.302];
   }, []);
-  const candidates = useMemo<FieldFeature[]>(
-    () => detectFields(center[0], center[1], 7),
-    [center],
-  );
-  const [selected, setSelected] = useState<Set<string>>(() => {
-    // Pre-select 5 of the candidates for fast demo
-    return new Set(candidates.slice(0, 5).map((c) => c.properties.CROMEID));
-  });
+
+  const [candidates, setCandidates] = useState<FieldFeature[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const county = sessionStorage.getItem("yieldmaxxing.onboard.county") || "lincolnshire";
+    fetch(`${API}/api/fields?lat=${center[0]}&lon=${center[1]}&radius_km=1&county=${county}&limit=200`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((geojson) => {
+        if (geojson?.features?.length) {
+          const mapped: FieldFeature[] = geojson.features.map((f: any) => ({
+            type: "Feature",
+            id: f.properties?.cromeid || f.id,
+            geometry: f.geometry,
+            properties: {
+              CROMEID: f.properties?.cromeid || f.id || "",
+              LUCODE: f.properties?.lucode || "AC01",
+              REFDATE: "2025-06-15",
+              PROB: f.properties?.prob || 0.9,
+            },
+          }));
+          setCandidates(mapped);
+          setSelected(new Set(mapped.slice(0, 5).map((c) => c.properties.CROMEID)));
+        } else {
+          const mock = detectFields(center[0], center[1], 7);
+          setCandidates(mock);
+          setSelected(new Set(mock.slice(0, 5).map((c) => c.properties.CROMEID)));
+        }
+      })
+      .catch(() => {
+        const mock = detectFields(center[0], center[1], 7);
+        setCandidates(mock);
+        setSelected(new Set(mock.slice(0, 5).map((c) => c.properties.CROMEID)));
+      });
+  }, [center]);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -45,7 +74,7 @@ export default function OnboardFields() {
       selected.has(c.properties.CROMEID),
     );
     sessionStorage.setItem(
-      "cropguard.onboard.selected",
+      "yieldmaxxing.onboard.selected",
       JSON.stringify(chosen),
     );
     navigate("/onboard/details");

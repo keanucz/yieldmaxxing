@@ -1,7 +1,7 @@
 // Nominatim geocoding wrapper. GB-only, single-shot (no autocomplete).
 // Cached in localStorage so demo is offline-resilient after first hit.
 
-const CACHE_KEY = "cropguard.geocode.cache.v1";
+const CACHE_KEY = "yieldmaxxing.geocode.cache.v1";
 
 interface GeocodeHit {
   lat: number;

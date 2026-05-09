@@ -1,6 +1,6 @@
 import seedrandom from "seedrandom";
 
-const NAMESPACE = "cropguard-v1";
+const NAMESPACE = "yieldmaxxing-v1";
 
 export function makeRng(...parts: Array<string | number>) {
   return seedrandom([NAMESPACE, ...parts.map(String)].join(":"));

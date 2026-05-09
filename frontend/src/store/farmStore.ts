@@ -58,7 +58,7 @@ export const useFarmStore = create<FarmStore>()(
         }),
     }),
     {
-      name: "cropguard.farm.v1",
+      name: "yieldmaxxing.farm.v1",
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({
         farm: s.farm,

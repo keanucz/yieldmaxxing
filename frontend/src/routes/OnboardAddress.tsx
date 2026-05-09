@@ -8,21 +8,37 @@ export default function OnboardAddress() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const API = import.meta.env.VITE_API_URL || "http://localhost:9847";
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setErr(null);
+
+    // Try Go API geocode first (returns county for CROME lookup)
+    try {
+      const resp = await fetch(`${API}/api/geocode?postcode=${encodeURIComponent(value.trim())}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        sessionStorage.setItem("yieldmaxxing.onboard.center", JSON.stringify([data.lat, data.lon]));
+        sessionStorage.setItem("yieldmaxxing.onboard.address", `${data.postcode}, ${data.county || data.district}`);
+        sessionStorage.setItem("yieldmaxxing.onboard.county", (data.county || data.district || "").toLowerCase());
+        setLoading(false);
+        navigate("/onboard/fields");
+        return;
+      }
+    } catch { /* fall through */ }
+
+    // Fallback to Nominatim
     const hit = await geocode(value);
     setLoading(false);
     if (!hit) {
       setErr("Couldn't find that address. Try a UK postcode or town name.");
       return;
     }
-    sessionStorage.setItem(
-      "cropguard.onboard.center",
-      JSON.stringify([hit.lat, hit.lng]),
-    );
-    sessionStorage.setItem("cropguard.onboard.address", hit.display_name);
+    sessionStorage.setItem("yieldmaxxing.onboard.center", JSON.stringify([hit.lat, hit.lng]));
+    sessionStorage.setItem("yieldmaxxing.onboard.address", hit.display_name);
+    sessionStorage.setItem("yieldmaxxing.onboard.county", "lincolnshire");
     navigate("/onboard/fields");
   }
 

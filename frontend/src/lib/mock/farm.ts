@@ -158,7 +158,7 @@ export async function buildFarmFromSelection(args: {
       ...fmis,
     });
   }
-  const address = sessionStoreGet("cropguard.onboard.address");
+  const address = sessionStoreGet("yieldmaxxing.onboard.address");
   const { name, region } = deriveFarmIdentity(address);
   return {
     id: "user-farm-" + Math.round(Math.random() * 1e6),

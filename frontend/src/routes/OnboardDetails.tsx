@@ -53,7 +53,7 @@ export default function OnboardDetails() {
   const setOnboarded = useFarmStore((s) => s.setOnboarded);
 
   const initial = useMemo<RowState[]>(() => {
-    const raw = sessionStorage.getItem("cropguard.onboard.selected");
+    const raw = sessionStorage.getItem("yieldmaxxing.onboard.selected");
     if (!raw) return [];
     const features = JSON.parse(raw) as FieldFeature[];
     return features.map((f, i) => ({
@@ -78,7 +78,7 @@ export default function OnboardDetails() {
 
   async function save() {
     setSaving(true);
-    const centerRaw = sessionStorage.getItem("cropguard.onboard.center");
+    const centerRaw = sessionStorage.getItem("yieldmaxxing.onboard.center");
     const center: [number, number] = centerRaw
       ? (JSON.parse(centerRaw) as [number, number])
       : [53.073, -0.302];
@@ -89,7 +89,7 @@ export default function OnboardDetails() {
     });
     setFarm(farm);
     setOnboarded(true);
-    sessionStorage.removeItem("cropguard.onboard.selected");
+    sessionStorage.removeItem("yieldmaxxing.onboard.selected");
     navigate("/farm");
   }
 
