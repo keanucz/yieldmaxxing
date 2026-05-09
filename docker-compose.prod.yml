@@ -28,7 +28,7 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - SH_CLIENT_ID=${SH_CLIENT_ID}
       - SH_CLIENT_SECRET=${SH_CLIENT_SECRET}
     networks:
