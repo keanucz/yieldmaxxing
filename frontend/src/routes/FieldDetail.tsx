@@ -41,7 +41,12 @@ export default function FieldDetail() {
   const cap = field.ndviHistory[idx];
 
   return (
-    <Shell showBack backTo="/farm">
+    <Shell
+      showBack
+      backTo="/farm"
+      pageTitle={field.name}
+      breadcrumbs={[{ label: "Farm Overview", to: "/farm" }]}
+    >
       <div className="map-page">
         <div className="sidebar">
           <div className="section-label">{field.name}</div>
@@ -61,6 +66,20 @@ export default function FieldDetail() {
           </div>
           <div className="stat-row">
             <div className="stat">
+              <div className="label">Variety</div>
+              <div className="value" style={{ fontSize: 12 }}>
+                {field.variety}
+              </div>
+            </div>
+            <div className="stat">
+              <div className="label">Stage</div>
+              <div className="value" style={{ fontSize: 13 }}>
+                {field.growthStage}
+              </div>
+            </div>
+          </div>
+          <div className="stat-row">
+            <div className="stat">
               <div className="label">Fertilizer</div>
               <div className="value" style={{ fontSize: 13 }}>
                 {field.fertilizer}
@@ -74,36 +93,101 @@ export default function FieldDetail() {
             </div>
           </div>
 
-          <div className="section-label">NDVI snapshot</div>
+          <div className="section-label">Season plan</div>
           <div className="summary-card">
             <div className="row">
-              <span className="k">Mean</span>
-              <span className="v">{cap.ndviStats.mean.toFixed(2)}</span>
+              <span className="k">Sown</span>
+              <span className="v">{field.plantedDate}</span>
             </div>
             <div className="row">
-              <span className="k">Range (p10–p90)</span>
+              <span className="k">Sowing rate</span>
+              <span className="v">{field.sowingRateKgHa} kg/ha</span>
+            </div>
+            <div className="row">
+              <span className="k">Expected harvest</span>
               <span className="v">
-                {cap.ndviStats.p10.toFixed(2)} – {cap.ndviStats.p90.toFixed(2)}
+                {new Date(field.expectedHarvestDate).toLocaleDateString(
+                  "en-GB",
+                  { day: "numeric", month: "short", year: "numeric" },
+                )}
               </span>
             </div>
             <div className="row">
-              <span className="k">Cloud cover</span>
-              <span className="v">{cap.cloudCoverPct}%</span>
+              <span className="k">Yield estimate</span>
+              <span className="v">{field.expectedYieldTHa} t/ha</span>
+            </div>
+            <div className="row">
+              <span className="k">Previous crop</span>
+              <span className="v">{field.previousCrop}</span>
             </div>
           </div>
 
-          <div className="section-label">CROME</div>
+          <div className="section-label">Soil</div>
           <div className="summary-card">
             <div className="row">
-              <span className="k">CROMEID</span>
-              <span className="v" style={{ fontSize: 11 }}>
-                {field.feature.properties.CROMEID}
-              </span>
+              <span className="k">Type</span>
+              <span className="v">{field.soilType}</span>
             </div>
             <div className="row">
-              <span className="k">LUCODE</span>
-              <span className="v">{field.feature.properties.LUCODE}</span>
+              <span className="k">pH</span>
+              <span className="v">{field.soilPh}</span>
             </div>
+            <div className="row">
+              <span className="k">Organic matter</span>
+              <span className="v">{field.organicMatterPct}%</span>
+            </div>
+          </div>
+
+          {field.lastActivity && (
+            <>
+              <div className="section-label">Last activity</div>
+              <div className="summary-card">
+                <div className="row">
+                  <span className="k">
+                    {new Date(field.lastActivity.date).toLocaleDateString(
+                      "en-GB",
+                      { day: "numeric", month: "short" },
+                    )}
+                  </span>
+                  <span className="v" style={{ fontSize: 12 }}>
+                    {field.lastActivity.kind}
+                  </span>
+                </div>
+                <div className="row">
+                  <span className="k" style={{ fontSize: 11 }}>
+                    {field.lastActivity.detail}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="section-label">Health snapshot</div>
+          <div className="summary-card">
+            <div className="row">
+              <span className="k">Strongest area</span>
+              <span className="v">{healthLabel(cap.ndviStats.p90)}</span>
+            </div>
+            <div className="row">
+              <span className="k">Weakest area</span>
+              <span className="v">{healthLabel(cap.ndviStats.p10)}</span>
+            </div>
+            <div className="row">
+              <span className="k">Image quality</span>
+              <span className="v">{imageQualityLabel(cap.cloudCoverPct)}</span>
+            </div>
+          </div>
+
+          <div
+            className="field-record-foot"
+            style={{
+              fontSize: 10,
+              opacity: 0.5,
+              marginTop: 8,
+              letterSpacing: 0.3,
+            }}
+          >
+            Field ref · {field.feature.properties.CROMEID}
           </div>
         </div>
 
@@ -136,7 +220,7 @@ export default function FieldDetail() {
             </button>
           </div>
 
-          <Legend stats={cap.ndviStats} />
+          <Legend stats={cap.ndviStats} title="Field health" />
 
           <button
             className="btn-primary map-overlay bottom-right-cta"
@@ -157,4 +241,19 @@ export default function FieldDetail() {
       </div>
     </Shell>
   );
+}
+
+function healthLabel(ndvi: number): string {
+  if (ndvi >= 0.7) return "Vigorous";
+  if (ndvi >= 0.55) return "Healthy";
+  if (ndvi >= 0.4) return "Average";
+  if (ndvi >= 0.25) return "Stressed";
+  return "Bare / poor";
+}
+
+function imageQualityLabel(cloudPct: number): string {
+  if (cloudPct < 5) return "Clear";
+  if (cloudPct < 20) return "Mostly clear";
+  if (cloudPct < 50) return "Partly cloudy";
+  return "Cloudy";
 }

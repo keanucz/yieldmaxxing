@@ -60,6 +60,30 @@ export type CropName =
   | "Spring barley"
   | "Oilseed rape";
 
+export type SoilType =
+  | "Clay loam"
+  | "Sandy loam"
+  | "Silty clay"
+  | "Chalky loam"
+  | "Peat";
+
+export type GrowthStage =
+  | "Pre-sowing"
+  | "Emergence"
+  | "Tillering"
+  | "Stem extension"
+  | "Heading"
+  | "Flowering"
+  | "Grain fill"
+  | "Maturity"
+  | "Harvested";
+
+export interface FieldActivity {
+  date: string; // ISO
+  kind: "Sowing" | "Fertilization" | "Spraying" | "Scouting" | "Harvest";
+  detail: string; // e.g., "Urea 180 kg/ha"
+}
+
 export interface Field {
   id: string;
   name: string;
@@ -69,9 +93,19 @@ export interface Field {
   bbox: [number, number, number, number]; // [west, south, east, north]
   areaHa: number;
   crop: CropName;
+  variety: string; // e.g., "Pioneer P0937AM"
   fertilizer: FertilizerProduct;
   tractor: TractorModel;
   plantedDate: string;
+  expectedHarvestDate: string; // ISO
+  growthStage: GrowthStage;
+  sowingRateKgHa: number;
+  expectedYieldTHa: number;
+  previousCrop: CropName | "Cover crop";
+  soilType: SoilType;
+  soilPh: number;
+  organicMatterPct: number;
+  lastActivity: FieldActivity;
   ndviHistory: NDVICapture[];
   yieldZones: YieldZoneFeature[];
 }
@@ -100,10 +134,17 @@ export interface Prescription {
   skippedHa: number;
 }
 
+export type FarmType = "Conventional arable" | "Organic" | "Mixed";
+
 export interface Farm {
   id: string;
   name: string;
   ownerEmail: string;
+  ownerName: string;
+  address: string;
+  region: string; // e.g., "Lincolnshire, England"
+  farmType: FarmType;
+  establishedYear: number;
   centroid: [number, number]; // [lat, lng]
   fields: Field[];
 }

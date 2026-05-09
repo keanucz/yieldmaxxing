@@ -7,6 +7,55 @@ import type {
 import { ringAreaHa } from "../geo";
 import { GRID_SIZE, type NDVIGridCapture } from "./ndvi";
 
+// USD/ton wholesale, May 2026 — Hormuz crisis premium on urea has dragged the
+// whole N complex up. Used for the cost preview on the prescription page.
+export const FERTILIZER_PRICE_USD_PER_TON: Record<FertilizerProduct, number> = {
+  "Urea (46-0-0)": 680,
+  "CAN 27%N": 430,
+  "NPK 20-10-10": 560,
+  "UAN 28%": 395,
+};
+
+// What a non-precision farmer blanket-applies across the whole field "to be
+// safe" — matches the heavy zone in our 3-tier rule so the comparison is honest.
+export const UNIFORM_BLANKET_RATE_KG_HA = 140;
+
+export interface CostPreview {
+  product: FertilizerProduct;
+  pricePerTon: number;
+  variableKg: number;
+  variableCostUsd: number;
+  uniformKg: number;
+  uniformCostUsd: number;
+  savingUsd: number;
+  savingPct: number;
+  uniformRateKgHa: number;
+}
+
+export function computeCostPreview(
+  field: Field,
+  prescription: Prescription,
+): CostPreview {
+  const pricePerTon = FERTILIZER_PRICE_USD_PER_TON[prescription.product];
+  const uniformKg = field.areaHa * UNIFORM_BLANKET_RATE_KG_HA;
+  const variableKg = prescription.totalKg;
+  const variableCostUsd = (variableKg / 1000) * pricePerTon;
+  const uniformCostUsd = (uniformKg / 1000) * pricePerTon;
+  const savingUsd = uniformCostUsd - variableCostUsd;
+  const savingPct = uniformCostUsd > 0 ? savingUsd / uniformCostUsd : 0;
+  return {
+    product: prescription.product,
+    pricePerTon,
+    variableKg: Math.round(variableKg),
+    variableCostUsd: Math.round(variableCostUsd),
+    uniformKg: Math.round(uniformKg),
+    uniformCostUsd: Math.round(uniformCostUsd),
+    savingUsd: Math.round(savingUsd),
+    savingPct,
+    uniformRateKgHa: UNIFORM_BLANKET_RATE_KG_HA,
+  };
+}
+
 // Pick the peak-summer capture (highest mean NDVI) for the prescription basis.
 export function peakSummerCapture(history: NDVIGridCapture[]): NDVIGridCapture {
   let best = history[0];

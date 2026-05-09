@@ -54,9 +54,15 @@ export default function OnboardFields() {
   return (
     <div style={{ height: "100vh", width: "100vw", position: "relative" }}>
       <div className="topbar">
+        <button
+          className="back"
+          onClick={() => navigate("/onboard/address")}
+        >
+          ← Start over
+        </button>
         <div className="logo">
           <span className="mark">🌾</span>
-          <span>CropGuard</span>
+          <span>YieldMaxxing</span>
         </div>
         <div className="spacer" />
         <div className="user">Step 2 of 3 — Pick your fields</div>

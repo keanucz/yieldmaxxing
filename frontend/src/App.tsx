@@ -9,6 +9,7 @@ import OnboardDetails from "./routes/OnboardDetails";
 import FarmOverview from "./routes/FarmOverview";
 import FieldDetail from "./routes/FieldDetail";
 import FieldPrescribe from "./routes/FieldPrescribe";
+import Login from "./routes/Login";
 
 export default function App() {
   const farm = useFarmStore((s) => s.farm);
@@ -26,7 +27,7 @@ export default function App() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.shiftKey && (e.key === "R" || e.key === "r") && e.metaKey === false && e.ctrlKey === false) {
-        if (confirm("Reset CropGuard demo state?")) {
+        if (confirm("Reset YieldMaxxing demo state?")) {
           useFarmStore.getState().reset();
           localStorage.removeItem("cropguard.farm.v1");
           location.href = "/";
@@ -40,6 +41,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<OnboardingGate />} />
+      <Route path="/login" element={<Login />} />
       <Route path="/onboard/address" element={<OnboardAddress />} />
       <Route path="/onboard/fields" element={<OnboardFields />} />
       <Route path="/onboard/details" element={<OnboardDetails />} />

@@ -11,6 +11,7 @@ import { buildYieldZones } from "./yieldZones";
 import { renderNDVIBlobURL } from "../ndvi";
 import { ringAreaHa, offsetLatLng } from "../geo";
 import { makeRng } from "./seed";
+import { buildFmisData } from "./fmis";
 import type { Farm, Field, FieldFeature } from "../../types";
 
 // Per-field NDVI float grids (RAM only). Indexed by fieldId.
@@ -68,6 +69,7 @@ export async function buildDemoFarm(): Promise<Farm> {
     );
 
     const yieldZones = buildYieldZones(bbox, gridHistory);
+    const fmis = buildFmisData(s.id, s.crop, s.fertilizer, s.plantedDate);
 
     fields.push({
       id: s.id,
@@ -83,6 +85,7 @@ export async function buildDemoFarm(): Promise<Farm> {
       plantedDate: s.plantedDate,
       ndviHistory,
       yieldZones,
+      ...fmis,
     });
   }
 
@@ -90,6 +93,11 @@ export async function buildDemoFarm(): Promise<Farm> {
     id: DEMO_FARM.id,
     name: DEMO_FARM.name,
     ownerEmail: DEMO_FARM.ownerEmail,
+    ownerName: "Frederick Scandolara",
+    address: "Anwick, Sleaford NG34 9SE",
+    region: "Lincolnshire, England",
+    farmType: "Conventional arable",
+    establishedYear: 1962,
     centroid: DEMO_FARM.centroid,
     fields,
   };
@@ -130,6 +138,8 @@ export async function buildFarmFromSelection(args: {
       }),
     );
     const yieldZones = buildYieldZones(bbox, gridHistory);
+    const plantedDate = sel.crop === "Winter wheat" ? "October 2024" : "April 2025";
+    const fmis = buildFmisData(fieldId, sel.crop, sel.fertilizer, plantedDate);
 
     fields.push({
       id: fieldId,
@@ -142,21 +152,62 @@ export async function buildFarmFromSelection(args: {
       crop: sel.crop,
       fertilizer: sel.fertilizer,
       tractor: sel.tractor,
-      plantedDate: "April 2025",
+      plantedDate,
       ndviHistory,
       yieldZones,
+      ...fmis,
     });
   }
+  const address = sessionStoreGet("cropguard.onboard.address");
+  const { name, region } = deriveFarmIdentity(address);
   return {
     id: "user-farm-" + Math.round(Math.random() * 1e6),
-    name: "My Farm",
+    name,
     ownerEmail: args.ownerEmail,
+    ownerName: deriveOwnerName(args.ownerEmail),
+    address: address ?? "—",
+    region,
+    farmType: "Conventional arable",
+    establishedYear: 1980 + Math.floor(Math.random() * 30),
     centroid: args.centroid,
     fields,
   };
 }
 
+function sessionStoreGet(key: string): string | null {
+  if (typeof sessionStorage === "undefined") return null;
+  return sessionStorage.getItem(key);
+}
+
+function deriveFarmIdentity(address: string | null): {
+  name: string;
+  region: string;
+} {
+  if (!address) return { name: "Home Farm", region: "United Kingdom" };
+  // Best-effort: first comma-separated chunk → "<Place> Farm", remainder → region
+  const parts = address.split(",").map((s) => s.trim()).filter(Boolean);
+  const place = parts[0] ?? "Home";
+  const region = parts.slice(1).join(", ") || "United Kingdom";
+  // Strip postcodes / numbers from the place token
+  const cleanPlace = place.replace(/\b[A-Z]{1,2}\d[\dA-Z]?\s*\d[A-Z]{2}\b/gi, "")
+    .replace(/\d+/g, "")
+    .trim() || "Home";
+  return { name: `${cleanPlace} Farm`, region };
+}
+
+function deriveOwnerName(email: string): string {
+  const local = email.split("@")[0] ?? "Owner";
+  return local
+    .replace(/[._-]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((s) => s[0].toUpperCase() + s.slice(1))
+    .join(" ");
+}
+
 // Re-render NDVI blobs after rehydrate (blob: URLs don't survive page reload).
+// Also backfills FMIS metadata on farms persisted before fmis.ts existed so the
+// UI never crashes on missing fields (lastActivity, soilType, growthStage, ...).
 export async function rehydrateBlobs(farm: Farm): Promise<Farm> {
   for (const field of farm.fields) {
     let grids = gridCache.get(field.id);
@@ -178,6 +229,16 @@ export async function rehydrateBlobs(farm: Farm): Promise<Farm> {
       }),
     );
     field.ndviHistory = newHistory;
+
+    if (!field.lastActivity || !field.soilType || !field.growthStage) {
+      const fmis = buildFmisData(
+        field.id,
+        field.crop,
+        field.fertilizer,
+        field.plantedDate,
+      );
+      Object.assign(field, fmis);
+    }
   }
   return farm;
 }

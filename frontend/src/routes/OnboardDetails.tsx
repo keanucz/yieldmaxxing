@@ -113,6 +113,13 @@ export default function OnboardDetails() {
   return (
     <div className="onboard-stage">
       <div className="onboard-card" style={{ maxWidth: 700 }}>
+        <button
+          type="button"
+          className="onboard-back"
+          onClick={() => navigate("/onboard/address")}
+        >
+          ← Start over
+        </button>
         <div className="progress">
           <span className="active" />
           <span className="active" />

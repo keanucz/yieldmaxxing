@@ -8,7 +8,12 @@ import FertilizerPicker from "../components/controls/FertilizerPicker";
 import { Polygon } from "react-leaflet";
 import { ringToLatLngs } from "../lib/geo";
 import { getGridCache } from "../lib/mock/farm";
-import { buildPrescription, peakSummerCapture } from "../lib/mock/prescription";
+import {
+  buildPrescription,
+  computeCostPreview,
+  FERTILIZER_PRICE_USD_PER_TON,
+  peakSummerCapture,
+} from "../lib/mock/prescription";
 import { generatePrescriptionZip, downloadBlob } from "../lib/isoxml";
 import type { FertilizerProduct, Prescription } from "../types";
 
@@ -29,6 +34,11 @@ export default function FieldPrescribe() {
     const grids = getGridCache(field.id);
     return buildPrescription(field, grids, product);
   }, [field, product]);
+
+  const cost = useMemo(
+    () => (field && prescription ? computeCostPreview(field, prescription) : null),
+    [field, prescription],
+  );
 
   useEffect(() => setDownloaded(false), [product]);
 
@@ -56,7 +66,15 @@ export default function FieldPrescribe() {
   })();
 
   return (
-    <Shell showBack backTo={`/field/${field.id}`}>
+    <Shell
+      showBack
+      backTo={`/field/${field.id}`}
+      pageTitle="Fertilizer plan"
+      breadcrumbs={[
+        { label: "Farm Overview", to: "/farm" },
+        { label: field.name, to: `/field/${field.id}` },
+      ]}
+    >
       <div className="map-page">
         <div className="sidebar">
           <div className="section-label">AI fertilizer plan</div>
@@ -64,8 +82,9 @@ export default function FieldPrescribe() {
           <div className="banner">
             <div className="tag">⚠ HORMUZ CRISIS</div>
             <div className="body">
-              Urea at <strong>$680/ton</strong> — variable-rate cuts your spend
-              while protecting yield.
+              {product.split(" ")[0]} at{" "}
+              <strong>${FERTILIZER_PRICE_USD_PER_TON[product]}/ton</strong> —
+              variable-rate cuts your spend while protecting yield.
             </div>
           </div>
 
@@ -96,6 +115,52 @@ export default function FieldPrescribe() {
                 <span className="v">{prescription.skippedHa} ha</span>
               </div>
             </div>
+          )}
+
+          {cost && (
+            <>
+              <div className="section-label">Cost preview</div>
+              <div className="summary-card">
+                <div className="row">
+                  <span className="k">Price</span>
+                  <span className="v" style={{ fontSize: 12 }}>
+                    ${cost.pricePerTon}/ton
+                  </span>
+                </div>
+                <div className="row">
+                  <span className="k">Variable-rate spend</span>
+                  <span className="v">
+                    ${cost.variableCostUsd.toLocaleString("en-US")}
+                  </span>
+                </div>
+                <div
+                  className="row"
+                  title={`Blanket ${cost.uniformRateKgHa} kg/ha across ${field.areaHa} ha`}
+                >
+                  <span className="k">
+                    Uniform spend ({cost.uniformRateKgHa} kg/ha)
+                  </span>
+                  <span
+                    className="v"
+                    style={{ color: "var(--text-2)", fontWeight: 500 }}
+                  >
+                    ${cost.uniformCostUsd.toLocaleString("en-US")}
+                  </span>
+                </div>
+                <div className="row">
+                  <span className="k" style={{ color: "#84cc16" }}>
+                    You save
+                  </span>
+                  <span
+                    className="v"
+                    style={{ color: "#84cc16", fontSize: 16 }}
+                  >
+                    ${cost.savingUsd.toLocaleString("en-US")} (
+                    {Math.round(cost.savingPct * 100)}%)
+                  </span>
+                </div>
+              </div>
+            </>
           )}
 
           <div className="section-label">What you'll send</div>
