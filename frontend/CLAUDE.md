@@ -39,6 +39,36 @@ Converts UK postcode to coordinates. Use this when farmer types a postcode.
 }
 ```
 
+### `GET /api/fields?lat=X&lon=Y&radius_km=0.5&county=lincolnshire` (no auth required)
+
+Returns GeoJSON FeatureCollection of CROME 2025 field boundary polygons near a point.
+This is a live proxy to the UK gov CROME OGC Features API — no local data needed.
+
+Query params:
+- `lat`, `lon` — centre point (required)
+- `radius_km` — search radius, default 0.5, max 5
+- `county` — English county name lowercase (e.g. "lincolnshire", "cambridgeshire"). Resolved from postcodes.io `county` field.
+- `limit` — max features, default 200, max 1000
+
+Response: standard GeoJSON FeatureCollection. Each feature has:
+- `geometry` — Polygon or MultiPolygon (field boundary)
+- `properties.cromeid` — unique field ID
+- `properties.lucode` — land use code (e.g. "AC63" = Winter Wheat)
+- `properties.prob` — classification probability (0-1)
+- `properties.county` — county abbreviation
+
+Example usage:
+```typescript
+const geocodeResp = await fetch('/api/geocode?postcode=LN4+4TQ');
+const { lat, lon, county } = await geocodeResp.json();
+
+const fieldsResp = await fetch(`/api/fields?lat=${lat}&lon=${lon}&radius_km=0.5&county=${county.toLowerCase()}`);
+const geojson = await fieldsResp.json();
+// geojson.features = array of field polygons → render on map
+```
+
+---
+
 ### `GET /api/satellite/ndvi?lat=X&lon=Y&radius_km=1` (requires JWT)
 
 Returns **raw PNG** (image/png content-type) of NDVI colour-mapped satellite imagery.
@@ -73,27 +103,20 @@ Poll for job status. Statuses: `pending` → `fetching_satellite` → `analyzing
 
 ---
 
-## CROME Field Boundaries (PMTiles)
+## CROME Field Boundaries (Live API)
 
 ### What it is
 
-CROME (Crop Map of England 2024) contains polygons for every agricultural field in England with crop type classification. We've converted it to PMTiles format for efficient vector tile serving.
+CROME 2025 (Crop Map of England) contains polygons for every agricultural field in England with crop type classification. The Go backend proxies the UK gov OGC Features API — no local data files needed.
 
-### How to load PMTiles in Mapbox GL JS
+### How to use it
 
-```bash
-npm install pmtiles mapbox-gl
-```
+After geocoding a postcode, call `/api/fields` with the lat/lon and county. The backend returns a standard GeoJSON FeatureCollection that you render directly as a Mapbox GL source.
 
 ```typescript
 import mapboxgl from 'mapbox-gl';
-import { Protocol } from 'pmtiles';
+import { bbox } from '@turf/bbox';
 
-// Register PMTiles protocol (do once at app init)
-const protocol = new Protocol();
-mapboxgl.addProtocol('pmtiles', protocol.tile);
-
-// In your map setup:
 const map = new mapboxgl.Map({
   container: 'map',
   style: 'mapbox://styles/mapbox/satellite-streets-v12',
@@ -102,91 +125,62 @@ const map = new mapboxgl.Map({
 });
 
 map.on('load', () => {
-  // Add CROME source — URL points to the PMTiles file
-  map.addSource('crome', {
-    type: 'vector',
-    url: 'pmtiles:///data/crome.pmtiles',
+  // GeoJSON source — starts empty, filled after geocode + fields fetch
+  map.addSource('crome-fields', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] },
   });
 
-  // Render field boundaries as polygons
   map.addLayer({
-    id: 'crome-fields-fill',
+    id: 'crome-fill',
     type: 'fill',
-    source: 'crome',
-    'source-layer': 'crome',
-    paint: {
-      'fill-color': '#22c55e',
-      'fill-opacity': 0.15,
-    },
+    source: 'crome-fields',
+    paint: { 'fill-color': '#22c55e', 'fill-opacity': 0.2 },
   });
 
   map.addLayer({
-    id: 'crome-fields-outline',
+    id: 'crome-outline',
     type: 'line',
-    source: 'crome',
-    'source-layer': 'crome',
-    paint: {
-      'line-color': '#16a34a',
-      'line-width': 1.5,
-    },
-  });
-
-  // Highlight on hover
-  map.on('mousemove', 'crome-fields-fill', (e) => {
-    map.getCanvas().style.cursor = 'pointer';
-    // Optionally set feature state for highlight
-  });
-
-  map.on('mouseleave', 'crome-fields-fill', () => {
-    map.getCanvas().style.cursor = '';
+    source: 'crome-fields',
+    paint: { 'line-color': '#16a34a', 'line-width': 2 },
   });
 
   // Click to select field
-  map.on('click', 'crome-fields-fill', (e) => {
+  map.on('click', 'crome-fill', (e) => {
     if (!e.features?.length) return;
     const feature = e.features[0];
-    const geometry = feature.geometry; // GeoJSON polygon
-    const properties = feature.properties;
-    // properties.luname = crop type (e.g. "Winter wheat", "Maize")
-    // properties.cromeid = unique field ID
-
-    // Use this geometry to:
-    // 1. Highlight the selected field
-    // 2. Compute bounding box for satellite fetch
-    // 3. Pass to job creation
     onFieldSelected(feature);
   });
 });
-```
 
-### Computing BBox from selected polygon
-
-```typescript
-import { bbox } from '@turf/bbox';
+// After geocode, fetch and display fields:
+async function loadFields(lat: number, lon: number, county: string) {
+  const resp = await fetch(
+    `/api/fields?lat=${lat}&lon=${lon}&radius_km=0.5&county=${county.toLowerCase()}`
+  );
+  const geojson = await resp.json();
+  map.getSource('crome-fields').setData(geojson);
+}
 
 function onFieldSelected(feature: GeoJSON.Feature) {
   const [west, south, east, north] = bbox(feature);
   const center = [(west + east) / 2, (south + north) / 2];
 
-  // Fetch NDVI for this field's extent
+  // Fetch NDVI for this field's bounding box
   const params = new URLSearchParams({
     lat: center[1].toString(),
     lon: center[0].toString(),
     radius_km: '1',
   });
-  fetch(`/api/satellite/ndvi?${params}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  fetch(`/api/satellite/ndvi?${params}`, { credentials: 'include' });
 }
 ```
 
-### Serving the PMTiles file
-
-Option 1: Go API serves it as a static file from `/data/crome.pmtiles`
-Option 2: Place on CDN/S3 and point frontend URL directly at it
-Option 3: During dev, `npx serve ./data` on a port
-
-For hackathon demo, the Go API will serve it at `/data/crome.pmtiles` via Fiber static middleware.
+### Key points
+- No PMTiles, no local files — all live from gov.uk via Go backend proxy
+- Fields load on-demand after postcode geocode (typically 50-500 polygons)
+- Each feature has `cromeid`, `lucode`, `prob`, `county` in properties
+- County is required — get it from the geocode response
 
 ---
 
@@ -198,23 +192,24 @@ For hackathon demo, the Go API will serve it at `/data/crome.pmtiles` via Fiber 
 3. On submit → `GET /api/geocode?postcode=X` → `map.flyTo({ center, zoom: 14 })`
 
 ### Phase 2: CROME Field Selection
-4. Load PMTiles source (field boundaries appear as green outlines)
-5. Click handler on field polygons → highlight selected → show crop type in sidebar
-6. "Use this field" button stores the geometry
+4. After flyTo, call `GET /api/fields` with lat/lon/county from geocode response
+5. Set GeoJSON source data → field boundaries render as green polygons
+6. Click handler → highlight selected → show crop type in sidebar
+7. "Use this field" button stores the geometry
 
 ### Phase 3: Photo Upload + Analysis
-7. Upload panel — drag & drop or camera capture
-8. On submit → `POST /api/jobs` with location + photo
-9. Poll `GET /api/jobs/:id` every 2s until status = `awaiting_annotation` or `complete`
+8. Upload panel — drag & drop or camera capture
+9. On submit → `POST /api/jobs` with location + photo
+10. Poll `GET /api/jobs/:id` every 2s until status = `awaiting_annotation` or `complete`
 
 ### Phase 4: Results Display
-10. Overlay NDVI PNG on map (use ImageOverlay with bbox coordinates)
-11. Show diagnosis card (health score, issues, recommendations)
-12. Show treatment recommendations table
+11. Overlay NDVI PNG on map (use ImageOverlay with bbox coordinates from X-BBox header)
+12. Show diagnosis card (health score, issues, recommendations)
+13. Show treatment recommendations table
 
 ### Phase 5: Manual Draw Fallback
-13. Toggle "Draw custom boundary" activates `mapbox-gl-draw`
-14. Farmer draws polygon → same flow as clicking CROME field
+14. Toggle "Draw custom boundary" activates `mapbox-gl-draw`
+15. Farmer draws polygon → same flow as clicking CROME field
 
 ---
 

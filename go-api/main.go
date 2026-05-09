@@ -43,8 +43,9 @@ func main() {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
-	// Geocode (unprotected — frontend needs this before auth)
+	// Geocode + fields (unprotected — frontend needs these before auth)
 	app.Get("/api/geocode", handlers.Geocode)
+	app.Get("/api/fields", handlers.GetFields)
 
 	// Static data (PMTiles, etc) — unprotected for vector tile fetching
 	app.Static("/data", "./data", fiber.Static{
