@@ -2,29 +2,34 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
-	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"github.com/hackathon/farmwise/models"
+	"github.com/hackathon/cropguard/config"
+	"github.com/hackathon/cropguard/db"
+	"github.com/hackathon/cropguard/models"
 )
 
-var (
-	jobs   = make(map[string]*models.Job)
-	jobsMu sync.RWMutex
-)
+var agentServiceURL string
 
-const agentServiceURL = "http://localhost:8001"
+func InitJobs(cfg *config.Config) {
+	agentServiceURL = cfg.AgentServiceURL
+}
 
-func CreateJob(c *gin.Context) {
+func CreateJob(c *fiber.Ctx) error {
 	var req models.CreateJobRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	if req.Location.Lat == 0 && req.Location.Lon == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "location is required"})
 	}
 
 	if req.DateEnd == "" {
@@ -34,83 +39,177 @@ func CreateJob(c *gin.Context) {
 		req.DateStart = time.Now().AddDate(0, -1, 0).Format("2006-01-02")
 	}
 
+	userID := c.Locals("user_id").(string)
+	jobID := uuid.New().String()
+	now := time.Now()
+
+	locationJSON, _ := json.Marshal(req.Location)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := db.Pool.Exec(ctx,
+		`INSERT INTO jobs (id, user_id, status, location, date_start, date_end, crop_image_base64, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		jobID, userID, string(models.StatusPending), locationJSON,
+		req.DateStart, req.DateEnd, req.CropImageBase64, now, now,
+	)
+	if err != nil {
+		log.Printf("failed to insert job: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to create job"})
+	}
+
 	job := &models.Job{
-		ID:              uuid.New().String(),
+		ID:              jobID,
+		UserID:          userID,
 		Status:          models.StatusPending,
 		Location:        req.Location,
 		DateStart:       req.DateStart,
 		DateEnd:         req.DateEnd,
 		CropImageBase64: req.CropImageBase64,
-		CreatedAt:       time.Now(),
-		UpdatedAt:       time.Now(),
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 
-	jobsMu.Lock()
-	jobs[job.ID] = job
-	jobsMu.Unlock()
+	go dispatchToAgents(jobID, job)
 
-	go dispatchToAgents(job.ID)
-
-	c.JSON(http.StatusCreated, job)
+	return c.Status(fiber.StatusCreated).JSON(job)
 }
 
-func GetJob(c *gin.Context) {
-	id := c.Param("id")
-	jobsMu.RLock()
-	job, ok := jobs[id]
-	jobsMu.RUnlock()
-	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
-		return
+func GetJob(c *fiber.Ctx) error {
+	id := c.Params("id")
+	userID := c.Locals("user_id").(string)
+
+	job, err := loadJob(id, userID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "job not found"})
 	}
-	c.JSON(http.StatusOK, job)
+	return c.JSON(job)
 }
 
-func SubmitAnnotations(c *gin.Context) {
-	id := c.Param("id")
-	jobsMu.RLock()
-	job, ok := jobs[id]
-	jobsMu.RUnlock()
-	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
-		return
+func ListJobs(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(string)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rows, err := db.Pool.Query(ctx,
+		`SELECT id, user_id, status, location, date_start, date_end, crop_image_base64,
+		        satellite_images, crop_analysis, annotations, final_report, error, created_at, updated_at
+		 FROM jobs WHERE user_id = $1 ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to list jobs"})
 	}
+	defer rows.Close()
+
+	jobs := make([]*models.Job, 0)
+	for rows.Next() {
+		job, err := scanJob(rows)
+		if err != nil {
+			log.Printf("failed to scan job: %v", err)
+			continue
+		}
+		jobs = append(jobs, job)
+	}
+
+	return c.JSON(jobs)
+}
+
+func SubmitAnnotations(c *fiber.Ctx) error {
+	id := c.Params("id")
+	userID := c.Locals("user_id").(string)
+
+	job, err := loadJob(id, userID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "job not found"})
+	}
+
 	if job.Status != models.StatusAwaitingAnnotation {
-		c.JSON(http.StatusConflict, gin.H{
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
 			"error":  fmt.Sprintf("job not awaiting annotation, current status: %s", job.Status),
 			"status": job.Status,
 		})
-		return
 	}
 
 	var req models.AnnotationRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	jobsMu.Lock()
+	annotationsJSON, _ := json.Marshal(req.Annotations)
+	now := time.Now()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err = db.Pool.Exec(ctx,
+		`UPDATE jobs SET annotations = $1, status = $2, updated_at = $3 WHERE id = $4`,
+		annotationsJSON, string(models.StatusOptimizing), now, id,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update job"})
+	}
+
 	job.Annotations = req.Annotations
 	job.Status = models.StatusOptimizing
-	job.UpdatedAt = time.Now()
-	jobsMu.Unlock()
+	job.UpdatedAt = now
 
 	go resumeAgentWithAnnotations(id, req.Annotations)
 
-	c.JSON(http.StatusOK, job)
+	return c.JSON(job)
 }
 
-func ListJobs(c *gin.Context) {
-	jobsMu.RLock()
-	defer jobsMu.RUnlock()
-	all := make([]*models.Job, 0, len(jobs))
-	for _, j := range jobs {
-		all = append(all, j)
+// --- DB helpers ---
+
+type scannable interface {
+	Scan(dest ...any) error
+}
+
+func scanJob(row scannable) (*models.Job, error) {
+	var job models.Job
+	var locationJSON, satelliteJSON, analysisJSON, annotationsJSON, reportJSON []byte
+
+	err := row.Scan(
+		&job.ID, &job.UserID, &job.Status, &locationJSON,
+		&job.DateStart, &job.DateEnd, &job.CropImageBase64,
+		&satelliteJSON, &analysisJSON, &annotationsJSON, &reportJSON,
+		&job.Error, &job.CreatedAt, &job.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
 	}
-	c.JSON(http.StatusOK, all)
+
+	if locationJSON != nil {
+		json.Unmarshal(locationJSON, &job.Location)
+	}
+	if satelliteJSON != nil {
+		json.Unmarshal(satelliteJSON, &job.SatelliteImages)
+	}
+	if analysisJSON != nil {
+		json.Unmarshal(analysisJSON, &job.CropAnalysis)
+	}
+	if annotationsJSON != nil {
+		json.Unmarshal(annotationsJSON, &job.Annotations)
+	}
+	if reportJSON != nil {
+		json.Unmarshal(reportJSON, &job.FinalReport)
+	}
+
+	return &job, nil
 }
 
-// --- agent communication ---
+func loadJob(id, userID string) (*models.Job, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	row := db.Pool.QueryRow(ctx,
+		`SELECT id, user_id, status, location, date_start, date_end, crop_image_base64,
+		        satellite_images, crop_analysis, annotations, final_report, error, created_at, updated_at
+		 FROM jobs WHERE id = $1 AND user_id = $2`, id, userID)
+
+	return scanJob(row)
+}
+
+// --- Agent communication ---
 
 type agentStartPayload struct {
 	JobID           string          `json:"job_id"`
@@ -121,7 +220,7 @@ type agentStartPayload struct {
 }
 
 type agentResumePayload struct {
-	JobID       string               `json:"job_id"`
+	JobID       string              `json:"job_id"`
 	Annotations []models.BoundingBox `json:"annotations"`
 }
 
@@ -134,12 +233,8 @@ type agentStatusUpdate struct {
 	Error           string                  `json:"error,omitempty"`
 }
 
-func dispatchToAgents(jobID string) {
-	jobsMu.RLock()
-	job := jobs[jobID]
-	jobsMu.RUnlock()
-
-	updateStatus(jobID, models.StatusFetchingSatellite)
+func dispatchToAgents(jobID string, job *models.Job) {
+	updateJobStatus(jobID, models.StatusFetchingSatellite)
 
 	payload := agentStartPayload{
 		JobID:           jobID,
@@ -152,14 +247,14 @@ func dispatchToAgents(jobID string) {
 
 	resp, err := http.Post(agentServiceURL+"/run", "application/json", bytes.NewReader(body))
 	if err != nil {
-		setError(jobID, fmt.Sprintf("agent service unreachable: %v", err))
+		setJobError(jobID, fmt.Sprintf("agent service unreachable: %v", err))
 		return
 	}
 	defer resp.Body.Close()
 
 	var update agentStatusUpdate
 	if err := json.NewDecoder(resp.Body).Decode(&update); err != nil {
-		setError(jobID, fmt.Sprintf("bad agent response: %v", err))
+		setJobError(jobID, fmt.Sprintf("bad agent response: %v", err))
 		return
 	}
 	applyUpdate(jobID, update)
@@ -171,57 +266,75 @@ func resumeAgentWithAnnotations(jobID string, annotations []models.BoundingBox) 
 
 	resp, err := http.Post(agentServiceURL+"/resume", "application/json", bytes.NewReader(body))
 	if err != nil {
-		setError(jobID, fmt.Sprintf("agent service unreachable: %v", err))
+		setJobError(jobID, fmt.Sprintf("agent service unreachable: %v", err))
 		return
 	}
 	defer resp.Body.Close()
 
 	var update agentStatusUpdate
 	if err := json.NewDecoder(resp.Body).Decode(&update); err != nil {
-		setError(jobID, fmt.Sprintf("bad agent response: %v", err))
+		setJobError(jobID, fmt.Sprintf("bad agent response: %v", err))
 		return
 	}
 	applyUpdate(jobID, update)
 }
 
 func applyUpdate(jobID string, update agentStatusUpdate) {
-	jobsMu.Lock()
-	defer jobsMu.Unlock()
-	job, ok := jobs[jobID]
-	if !ok {
-		return
-	}
-	job.Status = update.Status
-	job.UpdatedAt = time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var satelliteJSON, analysisJSON, reportJSON []byte
 	if update.SatelliteImages != nil {
-		job.SatelliteImages = update.SatelliteImages
+		satelliteJSON, _ = json.Marshal(update.SatelliteImages)
 	}
 	if update.CropAnalysis != nil {
-		job.CropAnalysis = update.CropAnalysis
+		analysisJSON, _ = json.Marshal(update.CropAnalysis)
 	}
 	if update.FinalReport != nil {
-		job.FinalReport = update.FinalReport
+		reportJSON, _ = json.Marshal(update.FinalReport)
 	}
-	if update.Error != "" {
-		job.Error = update.Error
+
+	_, err := db.Pool.Exec(ctx,
+		`UPDATE jobs SET status = $1, satellite_images = COALESCE($2, satellite_images),
+		 crop_analysis = COALESCE($3, crop_analysis), final_report = COALESCE($4, final_report),
+		 error = COALESCE($5, error), updated_at = $6 WHERE id = $7`,
+		string(update.Status), satelliteJSON, analysisJSON, reportJSON,
+		nullableString(update.Error), time.Now(), jobID,
+	)
+	if err != nil {
+		log.Printf("failed to apply update for job %s: %v", jobID, err)
 	}
 }
 
-func updateStatus(jobID string, status models.JobStatus) {
-	jobsMu.Lock()
-	defer jobsMu.Unlock()
-	if job, ok := jobs[jobID]; ok {
-		job.Status = status
-		job.UpdatedAt = time.Now()
+func updateJobStatus(jobID string, status models.JobStatus) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := db.Pool.Exec(ctx,
+		`UPDATE jobs SET status = $1, updated_at = $2 WHERE id = $3`,
+		string(status), time.Now(), jobID,
+	)
+	if err != nil {
+		log.Printf("failed to update status for job %s: %v", jobID, err)
 	}
 }
 
-func setError(jobID string, msg string) {
-	jobsMu.Lock()
-	defer jobsMu.Unlock()
-	if job, ok := jobs[jobID]; ok {
-		job.Status = models.StatusFailed
-		job.Error = msg
-		job.UpdatedAt = time.Now()
+func setJobError(jobID string, msg string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := db.Pool.Exec(ctx,
+		`UPDATE jobs SET status = $1, error = $2, updated_at = $3 WHERE id = $4`,
+		string(models.StatusFailed), msg, time.Now(), jobID,
+	)
+	if err != nil {
+		log.Printf("failed to set error for job %s: %v", jobID, err)
 	}
+}
+
+func nullableString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

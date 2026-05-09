@@ -1,0 +1,7 @@
+# Add this block to the Caddyfile in the homelab repo.
+# Location: caddy/Caddyfile (or equivalent on the Oracle VPS)
+
+yieldmaxxing.keanuc.net {
+    import keanuc-tls
+    import unraid 8080
+}

@@ -1,12 +1,40 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cropguard
+      POSTGRES_PASSWORD: cropguard
+      POSTGRES_DB: cropguard
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./go-api/db/migrations/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql
+    networks:
+      - farmwise
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cropguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   go-api:
     build: ./go-api
     ports:
       - "8080:8080"
     environment:
-      - GIN_MODE=release
+      - DATABASE_URL=postgres://cropguard:cropguard@postgres:5432/cropguard?sslmode=disable
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URL=${GOOGLE_REDIRECT_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - APP_URL=${APP_URL}
+      - AGENT_SERVICE_URL=http://python-agents:8001
     depends_on:
-      - python-agents
+      postgres:
+        condition: service_healthy
+      python-agents:
+        condition: service_started
     networks:
       - farmwise
 
@@ -20,6 +48,9 @@ services:
       - SH_CLIENT_SECRET=${SH_CLIENT_SECRET}
     networks:
       - farmwise
+
+volumes:
+  pgdata:
 
 networks:
   farmwise:

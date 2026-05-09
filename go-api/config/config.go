@@ -1,0 +1,35 @@
+package config
+
+import "os"
+
+type Config struct {
+	DatabaseURL        string
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURL  string
+	JWTSecret          string
+	AppURL             string
+	AgentServiceURL    string
+	Port               string
+}
+
+func Load() *Config {
+	cfg := &Config{
+		DatabaseURL:        getEnv("DATABASE_URL", "postgres://cropguard:cropguard@postgres:5432/cropguard"),
+		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
+		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/callback"),
+		JWTSecret:          getEnv("JWT_SECRET", "dev-secret-change-me"),
+		AppURL:             getEnv("APP_URL", "http://localhost:3000"),
+		AgentServiceURL:    getEnv("AGENT_SERVICE_URL", "http://python-agents:8001"),
+		Port:               getEnv("PORT", "8080"),
+	}
+	return cfg
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}

@@ -2,13 +2,11 @@
 
 Entry point for understanding the project. Start here.
 
-## Naming
+## Naming (effective)
 
-- **GitHub repo:** `keanucz/yieldmaxxing`
-- **Product / pitch:** **CropGuard**
-- **Code identifier (legacy, in `go.mod`, FastAPI titles, docker-compose):** **FarmWise**
-
-Three names is one too many — the team needs to pick one. Until then, treat **YieldMaxxing = repo, CropGuard = product, FarmWise = code identifier**.
+- **Product / Go module / Postgres DB:** **CropGuard** (`github.com/hackathon/cropguard`, Fiber app name "CropGuard API")
+- **GitHub repo + production domain:** **YieldMaxxing** (`keanucz/yieldmaxxing`, `yieldmaxxing.keanuc.net`)
+- **Legacy:** **FarmWise** still appears in the docker-compose network name and the Python FastAPI app title — rename when convenient.
 
 ## What this project is
 
@@ -37,4 +35,4 @@ How we're operating.
 
 ## Direction we're going (one-paragraph recap)
 
-Build a corn-first phone-photo + satellite NDVI diagnosis tool for the hackathon, on the existing Go API + Python LangGraph scaffold (Isaac), wired to a Vite/React frontend (Fabian, currently on an orphan `frontend` branch — needs merging). Pitch CropGuard as the only platform that combines phone-camera + satellite + supply-chain-aware fertiliser alternatives + UK-first localisation. Long-term, expand to the EU corn-belt smallholder market with a free, vendor-neutral, variable-rate-and-product fertility platform — a €480M–€720M/year preventable-fertiliser-waste opportunity. Three immediate decisions block clean execution: pick a project name, decide bounding-box vs polygon annotation, and decide how to merge Fabian's orphan frontend branch.
+Build a corn-first phone-photo + satellite NDVI diagnosis tool for the hackathon, on the Go (Fiber) + Postgres + Python LangGraph scaffold Keanu rewrote on top of Isaac's initial cut, wired to a Vite/React frontend (Fabian, currently on an orphan `frontend` branch — needs merging and OAuth wiring). Production stack already wired: Komodo on Unraid + Caddy on Oracle VPS, behind `yieldmaxxing.keanuc.net`. Pitch CropGuard as the only platform that combines phone-camera + satellite + supply-chain-aware fertiliser alternatives + UK-first localisation. Long-term, expand to the EU corn-belt smallholder market with a free, vendor-neutral, variable-rate-and-product fertility platform — a €480M–€720M/year preventable-fertiliser-waste opportunity. Two immediate decisions block clean execution: bounding-box vs polygon annotation, and how to merge Fabian's orphan frontend branch (and wire it through the new OAuth flow).

@@ -1,0 +1,21 @@
+# Add this block to komodo/resources/main.toml in the homelab repo.
+
+[[stack]]
+name = "yieldmaxxing"
+description = "YieldMaxxing - AI crop analysis + fertiliser recommendations"
+tags = ["homelab"]
+deploy = true
+[stack.config]
+server_id = "kiwi"
+linked_repo = "yieldmaxxing"
+run_directory = "."
+file_paths = ["docker-compose.prod.yml"]
+environment = """
+POSTGRES_PASSWORD=[[YIELDMAXXING_DB_PASSWORD]]
+ANTHROPIC_API_KEY=[[ANTHROPIC_API_KEY]]
+SH_CLIENT_ID=[[SH_CLIENT_ID]]
+SH_CLIENT_SECRET=[[SH_CLIENT_SECRET]]
+GOOGLE_CLIENT_ID=[[YIELDMAXXING_GOOGLE_CLIENT_ID]]
+GOOGLE_CLIENT_SECRET=[[YIELDMAXXING_GOOGLE_CLIENT_SECRET]]
+JWT_SECRET=[[YIELDMAXXING_JWT_SECRET]]
+"""

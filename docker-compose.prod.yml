@@ -1,0 +1,62 @@
+services:
+  api:
+    image: ghcr.io/keanucz/yieldmaxxing-api:latest
+    container_name: yieldmaxxing-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgres://cropguard:${POSTGRES_PASSWORD}@postgres:5432/cropguard
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URL=https://yieldmaxxing.keanuc.net/auth/callback
+      - JWT_SECRET=${JWT_SECRET}
+      - APP_URL=https://yieldmaxxing.keanuc.net
+      - GIN_MODE=release
+    depends_on:
+      postgres:
+        condition: service_healthy
+      agents:
+        condition: service_started
+    networks:
+      - yieldmaxxing
+
+  agents:
+    image: ghcr.io/keanucz/yieldmaxxing-agents:latest
+    container_name: yieldmaxxing-agents
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - SH_CLIENT_ID=${SH_CLIENT_ID}
+      - SH_CLIENT_SECRET=${SH_CLIENT_SECRET}
+    networks:
+      - yieldmaxxing
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: yieldmaxxing-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=cropguard
+      - POSTGRES_USER=cropguard
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cropguard -d cropguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - yieldmaxxing
+
+volumes:
+  pgdata:
+
+networks:
+  yieldmaxxing:
+    driver: bridge

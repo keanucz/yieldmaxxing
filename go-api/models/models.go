@@ -2,6 +2,19 @@ package models
 
 import "time"
 
+// --- User ---
+
+type User struct {
+	ID        string    `json:"id"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	AvatarURL string    `json:"avatar_url"`
+	Provider  string    `json:"provider"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// --- Job ---
+
 type JobStatus string
 
 const (
@@ -15,8 +28,8 @@ const (
 )
 
 type Location struct {
-	Lat  float64 `json:"lat" binding:"required"`
-	Lon  float64 `json:"lon" binding:"required"`
+	Lat  float64 `json:"lat"`
+	Lon  float64 `json:"lon"`
 	Name string  `json:"name"`
 }
 
@@ -26,17 +39,6 @@ type BoundingBox struct {
 	Y     float64 `json:"y"`
 	W     float64 `json:"w"`
 	H     float64 `json:"h"`
-}
-
-type CreateJobRequest struct {
-	Location       Location `json:"location" binding:"required"`
-	DateStart      string   `json:"date_start"`
-	DateEnd        string   `json:"date_end"`
-	CropImageBase64 string  `json:"crop_image_base64"` // base64 encoded crop photo from farmer
-}
-
-type AnnotationRequest struct {
-	Annotations []BoundingBox `json:"annotations" binding:"required"`
 }
 
 type SatelliteImages struct {
@@ -83,12 +85,13 @@ type FinalReport struct {
 }
 
 type Job struct {
-	ID               string           `json:"id"`
-	Status           JobStatus        `json:"status"`
-	Location         Location         `json:"location"`
-	DateStart        string           `json:"date_start"`
-	DateEnd          string           `json:"date_end"`
-	CropImageBase64  string           `json:"crop_image_base64,omitempty"`
+	ID              string           `json:"id"`
+	UserID          string           `json:"user_id"`
+	Status          JobStatus        `json:"status"`
+	Location        Location         `json:"location"`
+	DateStart       string           `json:"date_start"`
+	DateEnd         string           `json:"date_end"`
+	CropImageBase64 string           `json:"crop_image_base64,omitempty"`
 	SatelliteImages *SatelliteImages `json:"satellite_images,omitempty"`
 	CropAnalysis    *CropAnalysis    `json:"crop_analysis,omitempty"`
 	Annotations     []BoundingBox    `json:"annotations,omitempty"`
@@ -96,4 +99,17 @@ type Job struct {
 	Error           string           `json:"error,omitempty"`
 	CreatedAt       time.Time        `json:"created_at"`
 	UpdatedAt       time.Time        `json:"updated_at"`
+}
+
+// --- Request/Response ---
+
+type CreateJobRequest struct {
+	Location        Location `json:"location"`
+	DateStart       string   `json:"date_start"`
+	DateEnd         string   `json:"date_end"`
+	CropImageBase64 string   `json:"crop_image_base64"`
+}
+
+type AnnotationRequest struct {
+	Annotations []BoundingBox `json:"annotations"`
 }
