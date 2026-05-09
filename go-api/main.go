@@ -26,7 +26,7 @@ func main() {
 	handlers.InitSatellite(cfg)
 
 	app := fiber.New(fiber.Config{
-		AppName: "CropGuard API",
+		AppName: "YieldMaxxing API",
 	})
 
 	app.Use(recover.New())
@@ -71,7 +71,7 @@ func main() {
 	sat.Get("/ndvi", handlers.GetNDVI)
 	sat.Get("/rgb", handlers.GetRGB)
 
-	log.Printf("CropGuard API listening on :%s", cfg.Port)
+	log.Printf("YieldMaxxing API listening on :%s", cfg.Port)
 	if err := app.Listen("0.0.0.0:" + cfg.Port); err != nil {
 		log.Fatal(err)
 	}

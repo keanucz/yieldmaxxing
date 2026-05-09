@@ -7,14 +7,15 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
 const (
-	tokenURL   = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
-	processURL = "https://sh.dataspace.copernicus.eu/api/v1/process"
+	tokenURL   = "https://services.sentinel-hub.com/oauth/token"
+	processURL = "https://services.sentinel-hub.com/api/v1/process"
 )
 
 type Client struct {
@@ -26,6 +27,9 @@ func NewClient(clientID, clientSecret string) *Client {
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		TokenURL:     tokenURL,
+		EndpointParams: url.Values{
+			"grant_type": {"client_credentials"},
+		},
 	}
 	return &Client{
 		http: cfg.Client(context.Background()),

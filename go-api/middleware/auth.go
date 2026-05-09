@@ -1,59 +1,49 @@
 package middleware
 
 import (
-	"strings"
+	"context"
+	"os"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/hackathon/cropguard/db"
 )
 
-type JWTClaims struct {
-	UserID    string `json:"user_id"`
-	Email     string `json:"email"`
-	Name      string `json:"name"`
-	AvatarURL string `json:"avatar_url"`
-	jwt.RegisteredClaims
-}
-
-func AuthRequired(jwtSecret string) fiber.Handler {
+func AuthRequired(_ string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		tokenStr := extractToken(c)
-		if tokenStr == "" {
+		if os.Getenv("DEV_BYPASS_AUTH") == "1" {
+			c.Locals("user_id", "dev-user-000")
+			c.Locals("email", "dev@localhost")
+			c.Locals("name", "Dev User")
+			return c.Next()
+		}
+
+		sessionID := c.Cookies("session")
+		if sessionID == "" {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "missing or invalid authorization",
+				"error": "no session cookie",
 			})
 		}
 
-		claims := &JWTClaims{}
-		token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-			return []byte(jwtSecret), nil
-		})
-		if err != nil || !token.Valid {
+		ctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)
+		defer cancel()
+
+		var userID, email, name string
+		err := db.Pool.QueryRow(ctx,
+			`SELECT s.user_id, u.email, u.name
+			 FROM sessions s JOIN users u ON u.id = s.user_id
+			 WHERE s.id = $1 AND s.expires_at > NOW()`,
+			sessionID,
+		).Scan(&userID, &email, &name)
+		if err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "invalid or expired token",
+				"error": "invalid or expired session",
 			})
 		}
 
-		c.Locals("user_id", claims.UserID)
-		c.Locals("email", claims.Email)
-		c.Locals("name", claims.Name)
-
+		c.Locals("user_id", userID)
+		c.Locals("email", email)
+		c.Locals("name", name)
 		return c.Next()
 	}
-}
-
-func extractToken(c *fiber.Ctx) string {
-	// Check Authorization header first
-	auth := c.Get("Authorization")
-	if strings.HasPrefix(auth, "Bearer ") {
-		return strings.TrimPrefix(auth, "Bearer ")
-	}
-
-	// Check cookie
-	cookie := c.Cookies("token")
-	if cookie != "" {
-		return cookie
-	}
-
-	return ""
 }

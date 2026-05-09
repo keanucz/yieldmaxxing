@@ -17,7 +17,7 @@ type Config struct {
 
 func Load() *Config {
 	cfg := &Config{
-		DatabaseURL:        getEnv("DATABASE_URL", "postgres://cropguard:cropguard@postgres:5432/cropguard"),
+		DatabaseURL:        getEnv("DATABASE_URL", "postgres://yieldmaxxing:yieldmaxxing@postgres:5432/yieldmaxxing"),
 		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/callback"),
