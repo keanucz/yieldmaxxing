@@ -7,6 +7,267 @@
     "NDWI": "Water/drought stress detection",
     "EVI": "Enhanced vegetation index, better in dense canopy"
   },
+
+  "fertilizer_optimization": {
+    "overview": "Corn is the highest N-demanding arable crop. Typical UK/US target: 180-220 kg N/ha. Split applications outperform single-dose by 10-15% NUE. Always cross-reference NDVI zones for variable-rate application.",
+
+    "products": [
+      {
+        "id": "urea",
+        "name": "Urea",
+        "grade": "46-0-0",
+        "n_pct": 46,
+        "p_pct": 0,
+        "k_pct": 0,
+        "form": "granular",
+        "cost_per_tonne_gbp": 340,
+        "typical_rate_kg_ha": 200,
+        "n_delivered_kg_ha": 92,
+        "pros": [
+          "Highest N concentration — cheapest N per kg",
+          "Easy to store and handle",
+          "Can be blended with other granulars"
+        ],
+        "cons": [
+          "Volatilisation risk if surface-applied without incorporation — can lose 15-30% N as ammonia",
+          "Needs rainfall or incorporation within 4 days",
+          "Urease inhibitor (NBPT) coating recommended in warm/dry conditions"
+        ],
+        "best_for": ["Pre-plant incorporation", "Split spring top-dress with rain forecast"],
+        "volatilisation_risk": "high without incorporation",
+        "application_timing": "Apply at pre-plant or V3-V6 side-dress. Avoid surface application >10°C without rain."
+      },
+      {
+        "id": "can",
+        "name": "Calcium Ammonium Nitrate (CAN)",
+        "grade": "27-0-0",
+        "n_pct": 27,
+        "p_pct": 0,
+        "k_pct": 0,
+        "form": "granular",
+        "cost_per_tonne_gbp": 280,
+        "typical_rate_kg_ha": 370,
+        "n_delivered_kg_ha": 100,
+        "pros": [
+          "Half nitrate (immediately available), half ammonium (slower release) — best of both",
+          "Lower volatilisation risk than urea",
+          "Calcium content benefits soil structure"
+        ],
+        "cons": [
+          "Lower N% means higher haulage and spreading cost per kg N",
+          "More expensive per kg N than urea",
+          "Hygroscopic — store in dry conditions"
+        ],
+        "best_for": ["Top-dress applications in spring", "Fields with N leaching risk", "Variable-rate where precision matters"],
+        "volatilisation_risk": "low",
+        "application_timing": "Ideal for split top-dress at V4-V6. Can apply in drier conditions than urea."
+      },
+      {
+        "id": "uan",
+        "name": "UAN (Urea Ammonium Nitrate solution)",
+        "grade": "28-0-0",
+        "n_pct": 28,
+        "p_pct": 0,
+        "k_pct": 0,
+        "form": "liquid",
+        "cost_per_tonne_gbp": 220,
+        "typical_rate_kg_ha": 400,
+        "n_delivered_kg_ha": 112,
+        "pros": [
+          "Liquid — ideal for precision variable-rate application by GPS sprayer",
+          "Combines nitrate, ammonium and urea N forms for staggered release",
+          "Can be tank-mixed with crop protection products"
+        ],
+        "cons": [
+          "Leaf scorch risk if applied to wet foliage or high temperature",
+          "Requires liquid storage tank",
+          "Lower N% means larger volumes"
+        ],
+        "best_for": ["Variable-rate VRA applications", "Side-dress at V6 via coulters", "Fields with NDVI variability — match rate to NDVI zone"],
+        "volatilisation_risk": "medium",
+        "application_timing": "Apply V4-V8 via dribble bar or injected coulters. Avoid midday high-temp foliar contact."
+      },
+      {
+        "id": "npk_20_10_10",
+        "name": "NPK 20-10-10",
+        "grade": "20-10-10",
+        "n_pct": 20,
+        "p_pct": 10,
+        "k_pct": 10,
+        "form": "granular",
+        "cost_per_tonne_gbp": 420,
+        "typical_rate_kg_ha": 300,
+        "n_delivered_kg_ha": 60,
+        "p2o5_delivered_kg_ha": 30,
+        "k2o_delivered_kg_ha": 30,
+        "pros": [
+          "Single product delivers N, P and K — reduces passes",
+          "P supports early root development",
+          "K improves drought and disease tolerance"
+        ],
+        "cons": [
+          "P and K rates tied to N ratio — often need supplemental N",
+          "Higher cost per kg N than straight N products",
+          "May over-apply P or K vs soil index"
+        ],
+        "best_for": ["Pre-plant or at-planting starter", "Fields low in P and K (soil index 0-1)", "Seedbed incorporation"],
+        "application_timing": "Best pre-plant or placed 5cm beside/below seed at planting. Not for late top-dress."
+      },
+      {
+        "id": "dap",
+        "name": "DAP (Di-ammonium Phosphate)",
+        "grade": "18-46-0",
+        "n_pct": 18,
+        "p_pct": 46,
+        "k_pct": 0,
+        "form": "granular",
+        "cost_per_tonne_gbp": 510,
+        "typical_rate_kg_ha": 150,
+        "n_delivered_kg_ha": 27,
+        "p2o5_delivered_kg_ha": 69,
+        "pros": [
+          "Very high P — best for P-deficient soils at planting",
+          "Boosts early root establishment",
+          "Granular, easy to blend"
+        ],
+        "cons": [
+          "Expensive per tonne",
+          "Low N — needs companion N product",
+          "Not appropriate as primary N source"
+        ],
+        "best_for": ["Starter fertilizer at planting on P-deficient soils", "Low P index fields (index 0)"],
+        "application_timing": "At planting, placed or broadcast incorporated."
+      },
+      {
+        "id": "mop",
+        "name": "Muriate of Potash (MOP)",
+        "grade": "0-0-60",
+        "n_pct": 0,
+        "p_pct": 0,
+        "k_pct": 60,
+        "form": "granular",
+        "cost_per_tonne_gbp": 290,
+        "typical_rate_kg_ha": 120,
+        "k2o_delivered_kg_ha": 72,
+        "pros": [
+          "Cheapest K source",
+          "High K% — low application rate needed"
+        ],
+        "cons": [
+          "Chloride content can affect sensitive rotations",
+          "No N or P — must be combined"
+        ],
+        "best_for": ["K-deficient soils (index 0-1)", "Pre-plant incorporation"],
+        "application_timing": "Pre-plant or autumn application. Avoid spring top-dress — chloride risk."
+      },
+      {
+        "id": "sulfur_enhanced_urea",
+        "name": "Urea + Sulphur (e.g. S-urea 38+12S)",
+        "grade": "38-0-0+12S",
+        "n_pct": 38,
+        "p_pct": 0,
+        "k_pct": 0,
+        "s_pct": 12,
+        "form": "granular",
+        "cost_per_tonne_gbp": 360,
+        "typical_rate_kg_ha": 200,
+        "pros": [
+          "S co-applied with N — sulphur improves N use efficiency by 8-12%",
+          "S deficiency increasingly common on lighter soils post-Clean Air Act",
+          "Single pass delivers both nutrients"
+        ],
+        "cons": [
+          "Higher cost than straight urea",
+          "May over-supply S on clay soils that retain atmospheric S"
+        ],
+        "best_for": ["Sandy/light soils prone to S leaching", "Fields not receiving slurry/manure", "Where NDVI + yellowing pattern suggests S as co-limiting factor"],
+        "application_timing": "Spring top-dress at V3-V6."
+      }
+    ],
+
+    "n_rate_by_yield_target": [
+      {"yield_t_ha": 8,  "total_n_kg_ha": 160, "note": "Low input — drought-prone or marginal ground"},
+      {"yield_t_ha": 10, "total_n_kg_ha": 185, "note": "Typical UK/NW Europe commercial target"},
+      {"yield_t_ha": 12, "total_n_kg_ha": 210, "note": "High-yielding varieties on fertile soils"},
+      {"yield_t_ha": 14, "total_n_kg_ha": 235, "note": "Irrigated, premium hybrids — verify with soil test"}
+    ],
+
+    "split_application_plan": {
+      "description": "Split applications reduce volatilisation and leaching losses vs single dose. Standard 3-way split for corn:",
+      "splits": [
+        {
+          "timing": "Pre-plant / at-planting",
+          "growth_stage": "Before emergence",
+          "pct_of_total_n": 30,
+          "recommended_products": ["npk_20_10_10", "dap", "urea incorporated"],
+          "rationale": "Establish P and K with starter N. Incorporated urea avoids volatilisation."
+        },
+        {
+          "timing": "Early side-dress",
+          "growth_stage": "V4-V6 (4-6 leaf)",
+          "pct_of_total_n": 40,
+          "recommended_products": ["can", "uan", "urea (rain forecast)"],
+          "rationale": "Main growth flush. Rapid uptake phase begins. N most efficiently used here."
+        },
+        {
+          "timing": "Late side-dress / top-dress",
+          "growth_stage": "V8-V10 (8-10 leaf)",
+          "pct_of_total_n": 30,
+          "recommended_products": ["uan", "can"],
+          "rationale": "Support tassel development and grain fill. Liquid UAN via coulter avoids leaf burn."
+        }
+      ]
+    },
+
+    "ndvi_to_fertilizer_action": [
+      {
+        "ndvi_range": [0.75, 0.90],
+        "status": "Healthy",
+        "action": "No additional N needed. Maintain plan. Consider K top-up if soil index low.",
+        "rate_adjustment_pct": 0
+      },
+      {
+        "ndvi_range": [0.55, 0.75],
+        "status": "Mild stress",
+        "action": "Apply planned N dose at lower end of range. Scout for disease or pest before applying N — greening may be due to non-N factors.",
+        "rate_adjustment_pct": 0
+      },
+      {
+        "ndvi_range": [0.35, 0.55],
+        "status": "Moderate stress",
+        "action": "Increase N rate by 15-20%. Apply CAN or UAN for fast availability. If uniform across field, likely N deficiency — soil test to confirm. If patchy, scout for disease.",
+        "rate_adjustment_pct": 17
+      },
+      {
+        "ndvi_range": [0.20, 0.35],
+        "status": "Severe stress",
+        "action": "Emergency N application — 40-60 kg N/ha CAN or UAN side-dress immediately. Check for root health / compaction / waterlogging before spending on fertilizer. ROI may be limited at this severity.",
+        "rate_adjustment_pct": 35
+      },
+      {
+        "ndvi_range": [0.00, 0.20],
+        "status": "Critical",
+        "action": "Crop likely uneconomic to rescue with N alone. Diagnose root cause (disease, flooding, compaction). Consider partial write-off and reduce remaining input spend.",
+        "rate_adjustment_pct": 0
+      }
+    ],
+
+    "soil_type_adjustments": {
+      "Sandy loam":  {"leaching_risk": "high",  "extra_splits": true,  "preferred_products": ["can", "uan"], "note": "Add 10-15 kg N/ha extra — high leaching. Use 4 splits minimum."},
+      "Clay loam":   {"leaching_risk": "low",   "extra_splits": false, "preferred_products": ["urea", "can"], "note": "Standard rates. Incorporation of urea easy on clays."},
+      "Silty clay":  {"leaching_risk": "low",   "extra_splits": false, "preferred_products": ["can"],         "note": "Risk of surface capping — CAN safer than solid urea."},
+      "Chalky loam": {"leaching_risk": "medium","extra_splits": true,  "preferred_products": ["can", "uan"], "note": "Lime-rich soils reduce P availability — ensure DAP at planting."},
+      "Peat":        {"leaching_risk": "high",  "extra_splits": true,  "preferred_products": ["uan"],        "note": "Very high N mineralisation — reduce synthetic N by 30%, test mid-season."}
+    },
+
+    "micronutrients": {
+      "Zinc": "Critical for corn — deficiency common on pH >7 soils. Symptoms: white striping on young leaves. Apply 2-5 kg Zn/ha foliar if NDVI low with striping.",
+      "Manganese": "Deficiency on peaty/high-pH soils. Foliar Mn sulfate 1-2 kg/ha.",
+      "Boron": "Required for pollen viability. Apply 150-200 g B/ha foliar at VT if dry weather.",
+      "Sulfur": "Increasingly deficient on light soils. 20-30 kg S/ha alongside N. Use S-enhanced urea or separate ammonium sulfate."
+    }
+  },
+
   "diseases": [
     {
       "id": "gray_leaf_spot",
@@ -75,11 +336,18 @@
       "ndvi_signature": "Uniform low NDVI (0.3-0.5) across field zones, especially areas where N leaches",
       "risk_conditions": ["Sandy soils", "Excessive rainfall", "Cool soils reducing N uptake", "Inadequate fertilization"],
       "treatments": [
-        "Side-dress nitrogen application (UAN, urea, anhydrous ammonia) before V6",
-        "Soil test to determine precise rates",
-        "Variable rate application based on NDRE/NDVI zones"
+        "Side-dress UAN or CAN at V4-V8 — fastest response",
+        "Urea if incorporated or rain forecast within 24-48h",
+        "Target 40-60 kg N/ha emergency application if NDVI <0.4",
+        "Soil test to determine precise rates and split remaining season budget"
       ],
-      "economic_threshold": "Apply N when NDRE indicates deficiency confirmed by soil test"
+      "economic_threshold": "Apply N when NDRE indicates deficiency confirmed by soil test",
+      "fertilizer_recommendations": {
+        "first_choice": "uan",
+        "second_choice": "can",
+        "rate_kg_N_ha": 50,
+        "rationale": "UAN provides immediate nitrate + slower ammonium — fastest recovery. CAN if liquid not available."
+      }
     },
     {
       "id": "water_stress",
@@ -94,12 +362,60 @@
       "risk_conditions": ["Extended dry periods", "High temperatures >35C", "Sandy soils", "VT-R2 stage most critical"],
       "treatments": [
         "Irrigation — critical during VT-R2 (most sensitive period)",
-        "Minimum 1 inch/week during grain fill",
+        "Minimum 25mm/week during grain fill",
+        "Reduce N rate to match expected lower yield potential — avoid wasted input spend",
         "Soil moisture monitoring"
       ],
       "economic_threshold": "Irrigate when soil moisture falls below 50% of field capacity during VT-R2"
+    },
+    {
+      "id": "phosphorus_deficiency",
+      "name": "Phosphorus Deficiency",
+      "type": "nutrient",
+      "symptoms": [
+        "Purple/reddish discolouration of leaf margins and undersides",
+        "Stunted early growth — critical in first 3 weeks",
+        "Delayed maturity"
+      ],
+      "ndvi_signature": "Low early-season NDVI despite adequate N; purple colouration not detectable by NDVI alone",
+      "risk_conditions": ["Cold soils <10C", "Low soil P index (0-1)", "High pH calcareous soils", "Compacted soils restricting roots"],
+      "treatments": [
+        "DAP or NPK starter at planting (placed 5cm beside seed)",
+        "Foliar P not highly effective — soil application is key",
+        "Warm soil to improve P uptake — deep tillage if compacted"
+      ],
+      "fertilizer_recommendations": {
+        "first_choice": "dap",
+        "second_choice": "npk_20_10_10",
+        "rate_kg_p2o5_ha": 60,
+        "rationale": "DAP delivers very high P at planting for early root establishment. If K also low, NPK blend more efficient."
+      }
+    },
+    {
+      "id": "potassium_deficiency",
+      "name": "Potassium Deficiency",
+      "type": "nutrient",
+      "symptoms": [
+        "Scorch/browning of leaf margins starting on older lower leaves",
+        "Lodging — weak stalks that snap or lean over",
+        "Poor drought and disease tolerance"
+      ],
+      "ndvi_signature": "Marginal NDVI reduction with high spatial variability matching soil texture variation",
+      "risk_conditions": ["Sandy / low CEC soils", "K soil index 0", "High yield crops removing >180 kg K2O/ha"],
+      "treatments": [
+        "MOP (Muriate of Potash 0-0-60) pre-plant at 120-180 kg/ha",
+        "If crop already growing: liquid K foliar as emergency only (limited uptake)",
+        "Long-term: build soil K index with regular MOP or compound"
+      ],
+      "fertilizer_recommendations": {
+        "first_choice": "mop",
+        "second_choice": "npk_20_10_10",
+        "rate_kg_k2o_ha": 100,
+        "rationale": "MOP is cheapest K. Use NPK blend if N and K both needed in single pass."
+      }
     }
   ],
+
   "field_health_benchmarks": {
     "excellent": {"ndvi_range": [0.75, 0.90], "description": "Peak growth, no stress detected"},
     "good":      {"ndvi_range": [0.60, 0.75], "description": "Minor stress possible, monitor"},

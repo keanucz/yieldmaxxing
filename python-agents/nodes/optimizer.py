@@ -93,6 +93,14 @@ Write the plan as this JSON:
       "ndvi_mean": 0.0,
       "health_rating": "Excellent / Good / Fair / Poor / Critical",
       "diagnosis": "1-2 sentences on what is happening in this specific field",
+      "fertilizer_plan": {{
+        "product": "e.g. CAN 27%, UAN 28%, Urea 46-0-0, NPK 20-10-10",
+        "rate_kg_ha": 0,
+        "timing": "e.g. Apply at V4-V6 side-dress",
+        "splits": ["First application: X kg/ha at Y stage", "Second: ..."],
+        "estimated_cost_per_ha": "£X/ha",
+        "rationale": "Why this product and rate for this specific field's soil and NDVI"
+      }},
       "actions": [
         {{
           "priority": "Do today|Do this week|Do this month|Monitor",
