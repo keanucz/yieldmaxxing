@@ -44,13 +44,14 @@ class RunRequest(BaseModel):
 
 class ResumeRequest(BaseModel):
     job_id: str
-    annotations: list[BoundingBox]
+    selected_field_ids: list[int]
 
 class JobStatusResponse(BaseModel):
     job_id: str
     status: str
     satellite_images: dict | None = None
     crop_analysis: dict | None = None
+    detected_fields: list | None = None
     final_report: dict | None = None
     error: str | None = None
 
@@ -95,6 +96,7 @@ async def run_pipeline(req: RunRequest):
         status="awaiting_annotation",
         satellite_images=state.get("satellite_images"),
         crop_analysis=state.get("crop_analysis"),
+        detected_fields=state.get("detected_fields"),
     )
 
 
@@ -103,12 +105,10 @@ async def resume_pipeline(req: ResumeRequest):
     """Resume the graph after the farmer submits bounding box annotations."""
     thread_config = {"configurable": {"thread_id": req.job_id}}
 
-    annotations = [a.model_dump() for a in req.annotations]
-
     try:
         result = await asyncio.to_thread(
             graph.invoke,
-            Command(resume=annotations),
+            Command(resume=req.selected_field_ids),
             thread_config,
         )
     except Exception as e:

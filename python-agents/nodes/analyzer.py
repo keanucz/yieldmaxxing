@@ -6,7 +6,7 @@ from pathlib import Path
 
 import anthropic
 
-from graph import FarmState
+from state import FarmState
 
 _client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 

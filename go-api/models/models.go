@@ -85,20 +85,21 @@ type FinalReport struct {
 }
 
 type Job struct {
-	ID              string           `json:"id"`
-	UserID          string           `json:"user_id"`
-	Status          JobStatus        `json:"status"`
-	Location        Location         `json:"location"`
-	DateStart       string           `json:"date_start"`
-	DateEnd         string           `json:"date_end"`
-	CropImageBase64 string           `json:"crop_image_base64,omitempty"`
-	SatelliteImages *SatelliteImages `json:"satellite_images,omitempty"`
-	CropAnalysis    *CropAnalysis    `json:"crop_analysis,omitempty"`
-	Annotations     []BoundingBox    `json:"annotations,omitempty"`
-	FinalReport     *FinalReport     `json:"final_report,omitempty"`
-	Error           string           `json:"error,omitempty"`
-	CreatedAt       time.Time        `json:"created_at"`
-	UpdatedAt       time.Time        `json:"updated_at"`
+	ID               string           `json:"id"`
+	UserID           string           `json:"user_id"`
+	Status           JobStatus        `json:"status"`
+	Location         Location         `json:"location"`
+	DateStart        string           `json:"date_start"`
+	DateEnd          string           `json:"date_end"`
+	CropImageBase64  string           `json:"crop_image_base64,omitempty"`
+	SatelliteImages  *SatelliteImages `json:"satellite_images,omitempty"`
+	CropAnalysis     *CropAnalysis    `json:"crop_analysis,omitempty"`
+	DetectedFields   []map[string]any `json:"detected_fields,omitempty"`
+	SelectedFieldIDs []int            `json:"selected_field_ids,omitempty"`
+	FinalReport      *FinalReport     `json:"final_report,omitempty"`
+	Error            string           `json:"error,omitempty"`
+	CreatedAt        time.Time        `json:"created_at"`
+	UpdatedAt        time.Time        `json:"updated_at"`
 }
 
 // --- Request/Response ---
@@ -111,5 +112,5 @@ type CreateJobRequest struct {
 }
 
 type AnnotationRequest struct {
-	Annotations []BoundingBox `json:"annotations"`
+	SelectedFieldIDs []int `json:"selected_field_ids"`
 }
