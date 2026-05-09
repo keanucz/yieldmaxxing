@@ -76,14 +76,11 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
 
-      - name: Deploy to Unraid via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: 100.85.82.61
-          username: root
-          key: ${{ secrets.UNRAID_SSH_KEY }}
-          script: |
-            cd /mnt/user/appdata/repos/yieldmaxxing
-            docker compose pull
-            docker compose up -d
-            chown -R 99:100 /mnt/user/appdata/repos/yieldmaxxing
+      - name: Deploy to Unraid via Tailscale SSH
+        run: |
+          ssh -o StrictHostKeyChecking=no root@100.85.82.61 << 'DEPLOY'
+          cd /mnt/user/appdata/repos/yieldmaxxing
+          docker compose pull
+          docker compose up -d
+          chown -R 99:100 /mnt/user/appdata/repos/yieldmaxxing
+          DEPLOY
