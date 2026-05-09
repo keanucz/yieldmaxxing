@@ -11,6 +11,8 @@ type Config struct {
 	AppURL             string
 	AgentServiceURL    string
 	Port               string
+	SHClientID         string
+	SHClientSecret     string
 }
 
 func Load() *Config {
@@ -23,6 +25,8 @@ func Load() *Config {
 		AppURL:             getEnv("APP_URL", "http://localhost:3000"),
 		AgentServiceURL:    getEnv("AGENT_SERVICE_URL", "http://python-agents:8001"),
 		Port:               getEnv("PORT", "8080"),
+		SHClientID:         getEnv("SH_CLIENT_ID", ""),
+		SHClientSecret:     getEnv("SH_CLIENT_SECRET", ""),
 	}
 	return cfg
 }

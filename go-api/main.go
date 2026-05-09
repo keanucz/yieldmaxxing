@@ -23,6 +23,7 @@ func main() {
 
 	handlers.InitAuth(cfg)
 	handlers.InitJobs(cfg)
+	handlers.InitSatellite(cfg)
 
 	app := fiber.New(fiber.Config{
 		AppName: "CropGuard API",
@@ -55,6 +56,11 @@ func main() {
 	api.Get("/jobs", handlers.ListJobs)
 	api.Get("/jobs/:id", handlers.GetJob)
 	api.Post("/jobs/:id/annotations", handlers.SubmitAnnotations)
+
+	// Satellite endpoints (protected)
+	sat := app.Group("/api/satellite", middleware.AuthRequired(cfg.JWTSecret))
+	sat.Get("/ndvi", handlers.GetNDVI)
+	sat.Get("/rgb", handlers.GetRGB)
 
 	log.Printf("CropGuard API listening on :%s", cfg.Port)
 	if err := app.Listen("0.0.0.0:" + cfg.Port); err != nil {
