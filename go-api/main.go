@@ -2,40 +2,62 @@ package main
 
 import (
 	"log"
-	"net/http"
 
-	"github.com/gin-gonic/gin"
-	"github.com/hackathon/farmwise/handlers"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/hackathon/cropguard/config"
+	"github.com/hackathon/cropguard/db"
+	"github.com/hackathon/cropguard/handlers"
+	"github.com/hackathon/cropguard/middleware"
 )
 
 func main() {
-	r := gin.Default()
+	cfg := config.Load()
 
-	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-		c.Next()
-	})
-
-	api := r.Group("/api")
-	{
-		api.POST("/jobs", handlers.CreateJob)
-		api.GET("/jobs", handlers.ListJobs)
-		api.GET("/jobs/:id", handlers.GetJob)
-		api.POST("/jobs/:id/annotations", handlers.SubmitAnnotations)
+	if err := db.Connect(cfg.DatabaseURL); err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
 	}
+	defer db.Close()
 
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	handlers.InitAuth(cfg)
+	handlers.InitJobs(cfg)
+
+	app := fiber.New(fiber.Config{
+		AppName: "CropGuard API",
 	})
 
-	log.Println("FarmWise API listening on :8080")
-	if err := r.Run(":8080"); err != nil {
+	app.Use(recover.New())
+	app.Use(logger.New())
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     cfg.AppURL,
+		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
+		AllowHeaders:     "Content-Type,Authorization",
+		AllowCredentials: true,
+	}))
+
+	// Health check (unprotected)
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "ok"})
+	})
+
+	// Auth routes (unprotected)
+	auth := app.Group("/auth")
+	auth.Get("/login", handlers.GoogleLogin)
+	auth.Get("/callback", handlers.GoogleCallback)
+	auth.Post("/logout", handlers.Logout)
+
+	// Protected API routes
+	api := app.Group("/api", middleware.AuthRequired(cfg.JWTSecret))
+	api.Get("/me", handlers.GetMe)
+	api.Post("/jobs", handlers.CreateJob)
+	api.Get("/jobs", handlers.ListJobs)
+	api.Get("/jobs/:id", handlers.GetJob)
+	api.Post("/jobs/:id/annotations", handlers.SubmitAnnotations)
+
+	log.Printf("CropGuard API listening on :%s", cfg.Port)
+	if err := app.Listen("0.0.0.0:" + cfg.Port); err != nil {
 		log.Fatal(err)
 	}
 }
