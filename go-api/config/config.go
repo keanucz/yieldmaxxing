@@ -9,6 +9,7 @@ type Config struct {
 	GoogleRedirectURL  string
 	JWTSecret          string
 	AppURL             string
+	PublicURL          string // this API's own public URL, passed to Python so it can build satellite image URLs
 	AgentServiceURL    string
 	Port               string
 	SHClientID         string
@@ -23,6 +24,7 @@ func Load() *Config {
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/callback"),
 		JWTSecret:          getEnv("JWT_SECRET", "dev-secret-change-me"),
 		AppURL:             getEnv("APP_URL", "http://localhost:3000"),
+		PublicURL:          getEnv("PUBLIC_URL", "http://localhost:8080"),
 		AgentServiceURL:    getEnv("AGENT_SERVICE_URL", "http://python-agents:8001"),
 		Port:               getEnv("PORT", "8080"),
 		SHClientID:         getEnv("SH_CLIENT_ID", ""),

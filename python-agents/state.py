@@ -7,6 +7,7 @@ class FarmState(TypedDict):
     date_start: str
     date_end: str
     crop_image_base64: Optional[str]
+    go_api_url: Optional[str]  # Go API base URL for satellite image serving
     satellite_images: Optional[dict]
     detected_fields: Optional[list]    # auto-detected field bboxes [{id, x, y, w, h, ndvi_mean}]
     crop_analysis: Optional[dict]

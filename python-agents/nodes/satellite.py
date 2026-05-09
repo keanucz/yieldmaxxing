@@ -1,9 +1,9 @@
-"""Fetches RGB + NDVI imagery from Sentinel Hub for a given location and date range."""
+"""Fetches NDVI data from Sentinel Hub for field analysis.
+RGB imagery is served directly by the Go API — we just build the URL here.
+"""
 
 import os
-import base64
 import numpy as np
-from datetime import datetime
 from sentinelhub import (
     SHConfig,
     BBox,
@@ -26,22 +26,14 @@ def _build_config() -> SHConfig:
 
 
 def _lat_lon_to_bbox(lat: float, lon: float, radius_deg: float = 0.05) -> BBox:
-    """Create a BBox centred on the farm location. ~5km radius at mid-latitudes."""
     return BBox(
         bbox=[lon - radius_deg, lat - radius_deg, lon + radius_deg, lat + radius_deg],
         crs=CRS.WGS84,
     )
 
 
-RGB_EVALSCRIPT = """
-//VERSION=3
-function setup() {
-  return { input: ["B04","B03","B02"], output: { bands: 3 } };
-}
-function evaluatePixel(sample) {
-  return [3.5*sample.B04, 3.5*sample.B03, 3.5*sample.B02];
-}
-"""
+# --- RGB fetch is handled by Go API (handlers/satellite.go) ---
+# def _fetch_rgb(cfg, bbox, size, time_interval): ...
 
 NDVI_EVALSCRIPT = """
 //VERSION=3
@@ -59,37 +51,18 @@ async def satellite_fetch_node(state: FarmState) -> dict:
     cfg = _build_config()
     loc = state["location"]
     bbox = _lat_lon_to_bbox(loc["lat"], loc["lon"])
-    size = bbox_to_dimensions(bbox, resolution=10)  # 10m/pixel Sentinel-2
-
+    size = bbox_to_dimensions(bbox, resolution=10)
     time_interval = (state["date_start"], state["date_end"])
 
-    # --- RGB image ---
-    rgb_req = SentinelHubRequest(
-        evalscript=RGB_EVALSCRIPT,
-        input_data=[
-            SentinelHubRequest.input_data(
-                data_collection=DataCollection.SENTINEL2_L2A,
-                time_interval=time_interval,
-                mosaicking_order="leastCC",
-            )
-        ],
-        responses=[SentinelHubRequest.output_response("default", MimeType.PNG)],
-        bbox=bbox,
-        size=size,
-        config=cfg,
+    # RGB URL — served by Go, frontend fetches it directly
+    go_api = state.get("go_api_url", "http://localhost:8080")
+    rgb_url = (
+        f"{go_api}/api/satellite/rgb"
+        f"?lat={loc['lat']}&lon={loc['lon']}"
+        f"&date_start={state['date_start']}&date_end={state['date_end']}"
     )
-    rgb_data = rgb_req.get_data()[0]
 
-    # Encode PNG as base64 data URL for the frontend
-    from PIL import Image
-    import io
-    img = Image.fromarray(rgb_data.astype(np.uint8))
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    rgb_b64 = base64.b64encode(buf.getvalue()).decode()
-    rgb_url = f"data:image/png;base64,{rgb_b64}"
-
-    # --- NDVI ---
+    # NDVI float array — fetched here for field detection and stats
     ndvi_req = SentinelHubRequest(
         evalscript=NDVI_EVALSCRIPT,
         input_data=[
@@ -109,19 +82,19 @@ async def satellite_fetch_node(state: FarmState) -> dict:
 
     ndvi_stats = {
         "mean": float(np.mean(valid)),
-        "min": float(np.min(valid)),
-        "max": float(np.max(valid)),
-        "std": float(np.std(valid)),
-        "p10": float(np.percentile(valid, 10)),
-        "p25": float(np.percentile(valid, 25)),
-        "p75": float(np.percentile(valid, 75)),
-        "p90": float(np.percentile(valid, 90)),
+        "min":  float(np.min(valid)),
+        "max":  float(np.max(valid)),
+        "std":  float(np.std(valid)),
+        "p10":  float(np.percentile(valid, 10)),
+        "p25":  float(np.percentile(valid, 25)),
+        "p75":  float(np.percentile(valid, 75)),
+        "p90":  float(np.percentile(valid, 90)),
     }
 
     satellite_images = {
         "rgb_url": rgb_url,
         "ndvi_data": ndvi_stats,
-        "ndvi_array": ndvi_array.tolist(),  # raw 2D array for field detector
+        "ndvi_array": ndvi_array.tolist(),
         "metadata": {
             "bbox": list(bbox.lower_left) + list(bbox.upper_right),
             "resolution_m": 10,

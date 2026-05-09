@@ -17,9 +17,11 @@ import (
 )
 
 var agentServiceURL string
+var publicURL string
 
 func InitJobs(cfg *config.Config) {
 	agentServiceURL = cfg.AgentServiceURL
+	publicURL = cfg.PublicURL
 }
 
 func CreateJob(c *fiber.Ctx) error {
@@ -220,6 +222,7 @@ type agentStartPayload struct {
 	DateStart       string          `json:"date_start"`
 	DateEnd         string          `json:"date_end"`
 	CropImageBase64 string          `json:"crop_image_base64"`
+	GoAPIURL        string          `json:"go_api_url"` // Go serves RGB; Python builds the URL from this
 }
 
 type agentResumePayload struct {
@@ -246,6 +249,7 @@ func dispatchToAgents(jobID string, job *models.Job) {
 		DateStart:       job.DateStart,
 		DateEnd:         job.DateEnd,
 		CropImageBase64: job.CropImageBase64,
+		GoAPIURL:        publicURL,
 	}
 	body, _ := json.Marshal(payload)
 

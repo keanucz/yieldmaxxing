@@ -43,6 +43,7 @@ class RunRequest(BaseModel):
     date_start: str
     date_end: str
     crop_image_base64: str = ""
+    go_api_url: str = "http://localhost:8080"
 
 class ResumeRequest(BaseModel):
     job_id: str
@@ -71,6 +72,7 @@ async def run_pipeline(req: RunRequest):
         "date_start": req.date_start,
         "date_end": req.date_end,
         "crop_image_base64": req.crop_image_base64,
+        "go_api_url": req.go_api_url,
         "satellite_images": None,
         "crop_analysis": None,
         "annotations": None,

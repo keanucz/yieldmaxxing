@@ -10,7 +10,6 @@ import (
 	"github.com/hackathon/cropguard/config"
 	"github.com/hackathon/cropguard/db"
 	"github.com/hackathon/cropguard/handlers"
-	"github.com/hackathon/cropguard/middleware"
 )
 
 func main() {
@@ -21,53 +20,35 @@ func main() {
 	}
 	defer db.Close()
 
-	handlers.InitAuth(cfg)
 	handlers.InitJobs(cfg)
 	handlers.InitSatellite(cfg)
 
-	app := fiber.New(fiber.Config{
-		AppName: "YieldMaxxing API",
-	})
+	app := fiber.New(fiber.Config{AppName: "YieldMaxxing API"})
 
 	app.Use(recover.New())
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     cfg.AppURL,
-		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
-		AllowHeaders:     "Content-Type,Authorization",
-		AllowCredentials: true,
+		AllowOrigins: "*",
+		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
+		AllowHeaders: "Content-Type,Authorization",
 	}))
 
-	// Health check (unprotected)
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
-	// Geocode + fields (unprotected — frontend needs these before auth)
-	app.Get("/api/geocode", handlers.Geocode)
-	app.Get("/api/fields", handlers.GetFields)
+	app.Static("/data", "./data", fiber.Static{ByteRange: true})
 
-	// Static data (PMTiles, etc) — unprotected for vector tile fetching
-	app.Static("/data", "./data", fiber.Static{
-		ByteRange: true,
-	})
-
-	// Auth routes (unprotected)
-	auth := app.Group("/auth")
-	auth.Get("/login", handlers.GoogleLogin)
-	auth.Get("/callback", handlers.GoogleCallback)
-	auth.Post("/logout", handlers.Logout)
-
-	// Protected API routes
-	api := app.Group("/api", middleware.AuthRequired(cfg.JWTSecret))
-	api.Get("/me", handlers.GetMe)
+	api := app.Group("/api")
+	api.Get("/geocode", handlers.Geocode)
+	api.Get("/fields", handlers.GetFields)
 	api.Post("/jobs", handlers.CreateJob)
 	api.Get("/jobs", handlers.ListJobs)
 	api.Get("/jobs/:id", handlers.GetJob)
 	api.Post("/jobs/:id/annotations", handlers.SubmitAnnotations)
 
-	// Satellite endpoints (protected)
-	sat := app.Group("/api/satellite", middleware.AuthRequired(cfg.JWTSecret))
+	// Satellite — served by Go, consumed directly by frontend
+	sat := api.Group("/satellite")
 	sat.Get("/ndvi", handlers.GetNDVI)
 	sat.Get("/rgb", handlers.GetRGB)
 
