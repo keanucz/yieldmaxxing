@@ -1,0 +1,26 @@
+services:
+  go-api:
+    build: ./go-api
+    ports:
+      - "8080:8080"
+    environment:
+      - GIN_MODE=release
+    depends_on:
+      - python-agents
+    networks:
+      - farmwise
+
+  python-agents:
+    build: ./python-agents
+    ports:
+      - "8001:8001"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - SH_CLIENT_ID=${SH_CLIENT_ID}
+      - SH_CLIENT_SECRET=${SH_CLIENT_SECRET}
+    networks:
+      - farmwise
+
+networks:
+  farmwise:
+    driver: bridge

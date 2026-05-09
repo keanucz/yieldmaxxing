@@ -1,0 +1,110 @@
+{
+  "crop": "corn",
+  "scientific_name": "Zea mays",
+  "key_spectral_indices": {
+    "NDVI": "General health (healthy: 0.6-0.9, stressed: 0.2-0.5, severe: <0.2)",
+    "NDRE": "Early stress detection before visible symptoms appear",
+    "NDWI": "Water/drought stress detection",
+    "EVI": "Enhanced vegetation index, better in dense canopy"
+  },
+  "diseases": [
+    {
+      "id": "gray_leaf_spot",
+      "name": "Gray Leaf Spot",
+      "pathogen": "Cercospora zeae-maydis",
+      "symptoms": [
+        "Rectangular tan-to-gray lesions with parallel edges running along leaf veins",
+        "Yellow halo may surround lesions",
+        "Severe cases cause blighting of entire leaf"
+      ],
+      "ndvi_signature": "Patchy NDVI reduction (0.3-0.5) in humid areas with progressive decline",
+      "risk_conditions": ["High humidity >80%", "Temperatures 22-30C", "Extended leaf wetness", "Reduced tillage fields"],
+      "treatments": [
+        "Fungicide: strobilurins (azoxystrobin, pyraclostrobin) or triazoles (propiconazole)",
+        "Apply at VT/R1 stage for maximum protection",
+        "Improve field drainage and airflow",
+        "Plant resistant hybrids next season"
+      ],
+      "economic_threshold": "Apply fungicide when disease present on 50% of plants at or before VT stage"
+    },
+    {
+      "id": "northern_corn_leaf_blight",
+      "name": "Northern Corn Leaf Blight",
+      "pathogen": "Exserohilum turcicum",
+      "symptoms": [
+        "Large cigar-shaped lesions 2.5-15cm long, tan to grayish-brown",
+        "Lesions appear first on lower leaves, progress upward",
+        "Dark sporulation visible in high humidity"
+      ],
+      "ndvi_signature": "Rapid NDVI decline from 0.7+ to 0.3-0.4 in affected areas, starts lower canopy",
+      "risk_conditions": ["Moderate temperatures 18-27C", "High humidity", "Dense canopy"],
+      "treatments": [
+        "Fungicide: mancozeb, propiconazole, or azoxystrobin",
+        "Best applied at early tasseling (VT) before disease spreads above ear leaf",
+        "Crop rotation with non-host crops"
+      ],
+      "economic_threshold": "Treat when disease reaches ear leaf before silking"
+    },
+    {
+      "id": "common_rust",
+      "name": "Common Rust",
+      "pathogen": "Puccinia sorghi",
+      "symptoms": [
+        "Small circular-to-elongate brick-red pustules on both leaf surfaces",
+        "Scattered randomly across leaf surface",
+        "Severe infection causes leaf yellowing and death"
+      ],
+      "ndvi_signature": "Diffuse, uniform NDVI reduction across field",
+      "risk_conditions": ["Cool temperatures 15-25C", "High humidity", "Airborne spore spread"],
+      "treatments": [
+        "Fungicide: triazoles most effective (propiconazole, tebuconazole)",
+        "Apply when first pustules detected before VT",
+        "Resistant hybrids rarely need treatment"
+      ],
+      "economic_threshold": "Treat susceptible hybrids when rust present before silking and conditions favor spread"
+    },
+    {
+      "id": "nitrogen_deficiency",
+      "name": "Nitrogen Deficiency",
+      "type": "nutrient",
+      "symptoms": [
+        "Yellowing starting at leaf tip, progressing down midrib (V-shape pattern)",
+        "Lower leaves affected first, overall pale green color",
+        "Stunted growth, thin stalks"
+      ],
+      "ndvi_signature": "Uniform low NDVI (0.3-0.5) across field zones, especially areas where N leaches",
+      "risk_conditions": ["Sandy soils", "Excessive rainfall", "Cool soils reducing N uptake", "Inadequate fertilization"],
+      "treatments": [
+        "Side-dress nitrogen application (UAN, urea, anhydrous ammonia) before V6",
+        "Soil test to determine precise rates",
+        "Variable rate application based on NDRE/NDVI zones"
+      ],
+      "economic_threshold": "Apply N when NDRE indicates deficiency confirmed by soil test"
+    },
+    {
+      "id": "water_stress",
+      "name": "Drought / Water Stress",
+      "type": "abiotic",
+      "symptoms": [
+        "Leaf rolling during daytime heat",
+        "Firing (brown tips) on lower leaves",
+        "Reduced growth, silking/pollen shed mismatch in severe cases"
+      ],
+      "ndvi_signature": "NDVI reduction proportional to stress severity, NDWI shows moisture deficit clearly",
+      "risk_conditions": ["Extended dry periods", "High temperatures >35C", "Sandy soils", "VT-R2 stage most critical"],
+      "treatments": [
+        "Irrigation — critical during VT-R2 (most sensitive period)",
+        "Minimum 1 inch/week during grain fill",
+        "Soil moisture monitoring"
+      ],
+      "economic_threshold": "Irrigate when soil moisture falls below 50% of field capacity during VT-R2"
+    }
+  ],
+  "field_health_benchmarks": {
+    "excellent": {"ndvi_range": [0.75, 0.90], "description": "Peak growth, no stress detected"},
+    "good":      {"ndvi_range": [0.60, 0.75], "description": "Minor stress possible, monitor"},
+    "fair":      {"ndvi_range": [0.40, 0.60], "description": "Moderate stress, investigation needed"},
+    "poor":      {"ndvi_range": [0.20, 0.40], "description": "Significant stress or disease, action required"},
+    "critical":  {"ndvi_range": [0.00, 0.20], "description": "Severe damage, crop failure risk"}
+  }
+}
