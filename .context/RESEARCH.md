@@ -1,14 +1,69 @@
-# CropGuard Deep Research Report
+# Research
 
-## Executive Summary
+> Single source of truth for research and analysis. Combines the technical implementation research (Keanu, original `RESEARCH.md`) with the broader product context (long-term EU corn macro thesis) and consolidated open questions.
 
-CropGuard is a precision agriculture platform that combines phone-based crop photography with satellite imagery (Sentinel-2 NDVI) to generate targeted fertiliser recommendations — with supply-chain-aware alternatives when conventional fertilisers are unavailable due to Strait of Hormuz disruption. For a 3-hour hackathon MVP, the winning architecture is: Claude Vision API for phone image analysis + Copernicus Data Space (Sentinel Hub) for NDVI + a rule-based recommendation engine with fertiliser alternatives database + ISOXML export for tractor compatibility.
+---
 
-## 1. Satellite Imagery APIs
+## Executive summary
+
+CropGuard / YieldMaxxing is a precision-agriculture platform that combines phone-based crop photography (Claude Vision) with satellite imagery (Sentinel-2 NDVI) to generate targeted fertiliser recommendations. The hackathon MVP is corn-only, with bounding-box annotations on the RGB satellite image. The pitched product layers on supply-chain-aware fertiliser alternatives (Strait of Hormuz scenarios), UK CROME field boundaries, ISOXML export for tractor terminals, and multi-crop support — these are the v2 differentiators, not in code yet.
+
+**Winning architecture for the 3-hour MVP** (and what got built): Anthropic Claude Vision for phone image analysis + Copernicus Sentinel Hub for NDVI + a corn agronomic knowledge base + LangGraph state machine for the agent pipeline + Go API as the public gateway. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the implementation detail.
+
+---
+
+## Macro context: the long-term EU corn thesis
+
+Why this product matters at scale, beyond the hackathon demo. (This is the broader pitch the MVP is a wedge into.)
+
+### Fertilizer is breaking the economics of EU corn
+
+Corn is the most fertilizer-intensive grain crop in Europe:
+- ~150–200 kg N/ha (mostly CAN, urea, or UAN)
+- ~50–100 kg P₂O₅/ha (mostly DAP or MAP)
+- ~50–100 kg K₂O/ha (mostly MOP)
+
+Total fertilizer spend: ~€286/ha (Farmdesk NL benchmark). 13–14% of a French grain farmer's per-hectare budget (Argus). Prices are accelerating:
+- Urea retail +27% in a single month (DTN, April 2026)
+- World Bank projects urea +60% in 2026
+- EU fertilizer prices 10–15% above 2025
+- Prices rose 18% in 2025 before the 2026 shock
+
+Result: EU growers are quitting corn. Argus and Expana now expect EU grain maize area to fall **below 8 million hectares in 2026** — first time this century. France alone projected to lose **10–15% of corn area (~200,000 ha)** in a single season (AGPM).
+
+### Most of that fertilizer is wasted
+
+A European corn field is heterogeneous. Within-field response to N can swing from near-zero to double-digit yield gains across the same plot. Uniform 180 kg N/ha over-applies on responsive zones and wastes the rest on non-responsive zones.
+
+The waste is bigger than rate. Different zones need different *fertilizers*:
+- High-pH calcareous patch → MAP, not DAP
+- Waterlogged corner → CAN, not urea (volatilization)
+- Potassium-deficient sandy zone with chloride-sensitive end-use → SOP, not MOP
+- Cool clay zone in spring → ammonium-based forms
+
+Today every farmer picks one bag and spreads it everywhere.
+
+### Outcome opportunity
+
+For a representative 50-ha EU corn farm:
+- **20–30% reduction in N applied** (validated in EU and US VRA-N trials)
+- **5–15% yield uplift** on responsive zones (peer-reviewed precision-ag meta-analyses)
+- **€60–€90/ha fertilizer cost savings** at current prices
+- **Total: €3,000–€4,500/year saved on a 50-ha farm**, before yield uplift
+
+EU-wide across ~8M corn hectares: **€480M–€720M/year of preventable fertilizer waste recoverable**, with parallel reductions in nitrate runoff and N₂O emissions aligned with EU Green Deal and CAP eco-scheme targets.
+
+### Phase 1 geography
+
+Top 6 EU corn producers cover ~80% of EU production: France (~12M tons/year), Romania, Poland, Hungary, Germany, Italy.
+
+---
+
+## 1. Satellite imagery APIs
 
 ### Winner: Copernicus Data Space Ecosystem (Sentinel Hub)
 
-**Why**: Fastest path to working NDVI image. Server-side evalscript computes NDVI, returns rendered PNG/TIFF in one API call. Free account, no approval wait.
+Fastest path to a working NDVI image. Server-side evalscript computes NDVI, returns rendered PNG/TIFF in one API call. Free account, no approval wait.
 
 | Feature | Detail |
 |---------|--------|
@@ -17,15 +72,17 @@ CropGuard is a precision agriculture platform that combines phone-based crop pho
 | Cost | Free (Copernicus open data) |
 | Auth | OAuth2 client credentials |
 | SDK | `pip install sentinelhub` |
-| Process API | `https://sh.dataspace.copernicus.eu/process/v1` |
+| Process API | `https://sh.dataspace.copernicus.eu/process/v1` (free tier) |
 | Token endpoint | `https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token` |
 
-**Setup steps (15 min)**:
+> ⚠️ The current scaffold (`python-agents/nodes/satellite.py`) points at `https://services.sentinel-hub.com` (commercial Sentinel Hub), not the free Copernicus Data Space tier above. Reconcile — see open questions.
+
+**Setup steps (~15 min):**
 1. Register at dataspace.copernicus.eu
 2. Dashboard → User Settings → OAuth clients → Create
-3. Save client_id and client_secret
+3. Save `client_id` and `client_secret`
 
-**NDVI Evalscript**:
+**NDVI evalscript:**
 ```javascript
 //VERSION=3
 function setup() {
@@ -39,13 +96,14 @@ function evaluatePixel(sample) {
 }
 ```
 
-**Python usage**:
+**Python usage** (already implemented in `nodes/satellite.py`):
 ```python
 from sentinelhub import SHConfig, SentinelHubRequest, DataCollection, MimeType, BBox, CRS, bbox_to_dimensions
 
 config = SHConfig()
-config.sh_client_id = "your_client_id"
-config.sh_client_secret = "your_client_secret"
+config.sh_client_id = os.environ["SH_CLIENT_ID"]
+config.sh_client_secret = os.environ["SH_CLIENT_SECRET"]
+# For free tier:
 config.sh_token_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 config.sh_base_url = "https://sh.dataspace.copernicus.eu"
 
@@ -55,11 +113,9 @@ aoi_size = bbox_to_dimensions(aoi_bbox, resolution=10)
 request = SentinelHubRequest(
     evalscript=evalscript_ndvi,
     input_data=[SentinelHubRequest.input_data(
-        data_collection=DataCollection.SENTINEL2_L2A.define_from(
-            name="s2l2a", service_url="https://sh.dataspace.copernicus.eu"
-        ),
-        time_interval=("2024-06-01", "2024-06-30"),
-        other_args={"dataFilter": {"mosaickingOrder": "leastCC"}},
+        data_collection=DataCollection.SENTINEL2_L2A,
+        time_interval=("2026-04-01", "2026-04-30"),
+        mosaicking_order="leastCC",
     )],
     responses=[SentinelHubRequest.output_response("default", MimeType.TIFF)],
     bbox=aoi_bbox, size=aoi_size, config=config,
@@ -67,24 +123,25 @@ request = SentinelHubRequest(
 ndvi_data = request.get_data()
 ```
 
-### Alternatives Considered
+### Alternatives considered
 
 | API | Pros | Cons | Verdict |
 |-----|------|------|---------|
-| Google Earth Engine | Massive catalog, one-liner NDVI | Needs GCP project + EE approval (slow) | Risky for hackathon |
+| Google Earth Engine | Massive catalog, one-liner NDVI | GCP project + EE approval (slow) | Risky for hackathon |
 | Planet Labs | 3m daily imagery | No free tier for hackathons | Skip |
 | Sentinel-1 SAR | Cloud-penetrating (UK weather!) | Complex interpretation, not NDVI | Future enhancement |
 
 ---
 
-## 2. ML Models & Crop Health Detection
+## 2. ML models & crop health detection
 
-### Phone Image Analysis: Claude Vision API (PRIMARY)
+### Phone image analysis: Claude Vision API (primary, in code)
 
-No training needed. Handles any crop. Structured prompt:
+No training needed. Handles any crop. Structured prompt. Cost ~$0.01–0.05/image, latency 2–5s. Already wired in `python-agents/nodes/analyzer.py` (Claude Opus 4.7) and `optimizer.py` (Claude Sonnet 4.6) with a corn knowledge base in the system prompt.
 
 ```python
-prompt = """Analyze this crop photo. Assess:
+# Prompt skeleton (see analyzer.py for full version)
+prompt = """Analyze this corn crop photo. Assess:
 1. Overall health (healthy/moderate stress/severe stress)
 2. Nitrogen status: yellowing, especially older leaves
 3. Water stress: wilting, leaf curling, dry edges
@@ -93,78 +150,77 @@ prompt = """Analyze this crop photo. Assess:
 Return JSON with confidence scores for each category."""
 ```
 
-Cost: ~$0.01-0.05/image. Latency: 2-5s.
-
-### Backup: PlantVillage MobileNet
+### Backup: PlantVillage MobileNet (not in code)
 
 - Model: `linkanjarad/mobilenet_v2_1.0_224-plant-disease-identification`
 - 2.31M params, runs on CPU, 95.4% accuracy
 - 38 disease classes across 14 crops (includes corn, wheat/related)
-- Usage: `from transformers import pipeline; pipe = pipeline("image-classification", model="linkanjarad/mobilenet_v2_1.0_224-plant-disease-identification")`
 
-### Satellite Health Analysis: NDVI Thresholds
+### Satellite health analysis: NDVI thresholds (in `corn.json`)
 
 | NDVI Range | Interpretation (growing season) |
 |---|---|
-| 0.7 - 0.9 | Healthy, vigorous growth |
-| 0.5 - 0.7 | Moderate stress |
-| 0.3 - 0.5 | Significant stress |
+| 0.7 – 0.9 | Healthy, vigorous growth |
+| 0.5 – 0.7 | Moderate stress |
+| 0.3 – 0.5 | Significant stress |
 | < 0.3 | Severe stress or bare soil |
 
-### HuggingFace Models Assessment
+The full `field_health_benchmarks` schema in `python-agents/knowledge/corn.json` has five tiers: `excellent / good / fair / poor / critical`.
 
-| Model | What It Does | Hackathon Usable? |
+### HuggingFace models assessed (none usable)
+
+| Model | What it does | Hackathon usable? |
 |---|---|---|
-| allenai/satlas-pretrain | Foundation backbone (Swin-v2-B), needs fine-tuning | NO — too complex |
-| GFM-Bench/EuroSAT | Land USE classification (not health) | NO — wrong task |
-| NASA/IBM Prithvi-100M | Crop TYPE classification, 42% mIoU | NO — needs GPU, complex deps |
-| orion-ai-lab/S4A | 281GB dataset for crop type | NO — too large |
+| allenai/satlas-pretrain | Foundation backbone (Swin-v2-B), needs fine-tuning | NO |
+| GFM-Bench/EuroSAT | Land USE classification | NO — wrong task |
+| NASA/IBM Prithvi-100M | Crop TYPE classification, 42% mIoU | NO — needs GPU |
+| orion-ai-lab/S4A | 281GB dataset for crop type | NO |
 | saget-antoine/francecrops | Crop type from time-series | NO — needs training |
-| reglab/cal-ff | Animal feeding operations | IRRELEVANT |
 
-**Key finding**: NONE of these do crop HEALTH. They all do crop TYPE classification. For health, use NDVI thresholds + Claude Vision.
+**Key finding:** none of these do crop *health*. They all do crop *type*. For health, NDVI thresholds + Claude Vision (the current approach) is the right call.
 
 ---
 
-## 3. Tractor Export: Prescription Map Formats
+## 3. Tractor export: prescription map formats
 
-### ISOXML (ISO 11783-10) — Universal Standard
+### ISOXML (ISO 11783-10) — universal standard
 
 Works on ALL ISOBUS terminals: John Deere, CLAAS, Fendt, Case IH, Trimble, AgLeader.
 
-**Python library**: `pip install isoxml` (from Josephinum-Research/isoxml-py)
-**JS library**: `npm install isoxml` (v1.11.2, has GeoJSON→ISOXML built-in)
+- **Python library:** `pip install isoxml` (Josephinum-Research/isoxml-py)
+- **JS library:** `npm install isoxml` (v1.11.2, has GeoJSON → ISOXML built-in)
 
-**Recommended pipeline**:
+**Recommended pipeline:**
 ```
 Analysis → GeoJSON (rate per zone) → ISOXML ZIP (tractor) + Shapefile (legacy)
 ```
 
-**Minimal ISOXML generation (~30 lines Python)** — generates a ZIP file the farmer puts on USB stick.
+Generates a ZIP file the farmer puts on a USB stick. ~30 lines of Python.
 
-### Zone Map Structure
-- Grid cells: 10-20m for wheat, 5-10m for corn (match implement working width)
-- Typically 3-5 rate zones per field
-- Metadata needed: product type, rate (kg/ha), DDI code (6 = mass per area)
+### Zone map structure
+- Grid cells: 10–20m for wheat, 5–10m for corn (match implement working width)
+- Typically 3–5 rate zones per field
+- Metadata: product type, rate (kg/ha), DDI code (`6` = mass per area)
 
-### Shapefile (backup format)
-- Accepted by John Deere Ops Center, AgLeader, Trimble
-- Rate encoded as attribute column (e.g., `RATE_KG_HA`)
+### Shapefile (backup)
+Accepted by John Deere Ops Center, AgLeader, Trimble. Rate encoded as attribute column (e.g. `RATE_KG_HA`).
+
+> Status: aspirational. Not yet wired into the optimizer or any export endpoint.
 
 ---
 
-## 4. UK Field Boundaries
+## 4. UK field boundaries
 
-### Best Option: CROME Dataset (Crop Map of England 2024)
+### Best option: CROME 2024 (Crop Map of England)
 
-- **Source**: data.gov.uk / Defra Data Services Platform
-- **Coverage**: ALL agricultural fields in England (~32M hexagonal cells)
-- **Data**: Field boundaries + crop type classification (15+ crop types)
-- **Format**: GeoPackage (free download)
-- **Cost**: FREE, open data
-- **URL**: https://environment.data.gov.uk/dataset/0903079b-35a2-47de-b805-77a0cc0c57bf
+- **Source:** data.gov.uk / Defra Data Services Platform
+- **Coverage:** ALL agricultural fields in England (~32M hexagonal cells)
+- **Data:** Field boundaries + crop type classification (15+ crop types)
+- **Format:** GeoPackage (free download)
+- **Cost:** FREE, open data
+- **URL:** https://environment.data.gov.uk/dataset/0903079b-35a2-47de-b805-77a0cc0c57bf
 
-### Integration Pipeline
+### Integration pipeline
 
 ```python
 # Geocode postcode → spatial query CROME
@@ -178,18 +234,14 @@ point = Point(lng, lat)
 fields = crome[crome.contains(point)]
 ```
 
-### Alternative: Draw-your-own
-
-Use Leaflet + leaflet-draw plugin. Farmer draws polygon on satellite basemap. Store as GeoJSON. Zero external dependency.
-
-### Hybrid MVP Approach
+### Hybrid approach
 
 1. Farmer enters postcode → geocode via postcodes.io
-2. Query CROME for nearby field polygons  
+2. Query CROME for nearby field polygons
 3. Show suggested boundaries on Leaflet map
 4. Farmer accepts, modifies, or draws fresh
 
-### Other UK Data Sources
+### Other UK data sources
 
 | Source | Coverage | Quality | Access |
 |---|---|---|---|
@@ -199,182 +251,186 @@ Use Leaflet + leaflet-draw plugin. Farmer draws polygon on satellite basemap. St
 | OpenStreetMap | Patchy | Variable | Free, Overpass API |
 | RPA/LPIS | England (subsidy claimants) | Very high | NOT public |
 
+> Status: aspirational. Current scaffold uses raw lat/lon + a hardcoded ~5km bbox in `nodes/satellite.py`.
+
 ---
 
-## 5. Fertiliser Alternatives (Strait of Hormuz Scenario)
+## 5. Fertiliser alternatives (Strait of Hormuz scenario)
 
-### Supply Chain Risk
+### Supply-chain risk
 
-~30-35% of global urea exports transit the Strait of Hormuz. Nitrogen is most exposed. Potash least affected (Canada/Russia/Belarus ship via Atlantic/Baltic).
+~30–35% of global urea exports transit the Strait of Hormuz. Nitrogen is most exposed. Potash least affected (Canada/Russia/Belarus ship via Atlantic/Baltic).
 
-### Nitrogen Alternatives to Urea (46-0-0)
+### Nitrogen alternatives to urea (46-0-0)
 
-| Product | N% | Rate to replace 100kg urea | Cost/kg N (GBP) | Supply Risk | Source |
+| Product | N% | Rate to replace 100kg urea | Cost/kg N (GBP) | Supply risk | Source |
 |---|---|---|---|---|---|
-| CAN 27% | 27 | 170 kg | £1.04-1.19 | LOW | EU |
-| AN 34.5% | 34.5 | 133 kg | £0.87-1.01 | LOW | EU |
-| UAN-32 | 32 | 144 L | £0.78-0.91 | LOW | EU |
-| Blood meal | 12 | 383 kg | £4.17-5.83 | LOW | UK |
-| Digestate | 0.5 | 13,143 kg | £0-0.67 | VERY LOW | Local UK |
-| Cover crops (legumes) | N/A | N/A (fix 45-224 kg N/ha) | £seed cost | NONE | On-farm |
+| CAN 27% | 27 | 170 kg | £1.04–1.19 | LOW | EU |
+| AN 34.5% | 34.5 | 133 kg | £0.87–1.01 | LOW | EU |
+| UAN-32 | 32 | 144 L | £0.78–0.91 | LOW | EU |
+| Blood meal | 12 | 383 kg | £4.17–5.83 | LOW | UK |
+| Digestate | 0.5 | 13,143 kg | £0–0.67 | VERY LOW | Local UK |
+| Cover crops (legumes) | N/A | N/A (fix 45–224 kg N/ha) | seed cost only | NONE | On-farm |
 
-### Phosphorus Alternatives to DAP (18-46-0)
+### Phosphorus alternatives to DAP (18-46-0)
 
-| Product | P2O5% | Rate to replace 100kg DAP | Notes |
+| Product | P₂O₅% | Rate to replace 100kg DAP | Notes |
 |---|---|---|---|
 | SSP | 20 | 230 kg | Widely available |
 | TSP | 45 | 102 kg | Nearest DAP equivalent |
 | Bone meal | 15 | 307 kg | Slow release, acidic soils |
-| Mycorrhizal inoculants | N/A | N/A | Reduce P need 20-50% |
+| Mycorrhizal inoculants | N/A | N/A | Reduce P need 20–50% |
 | Struvite | 28 | N/A | Circular economy, growing |
 
-### Potassium: Least Affected
+### Potassium: least affected
 
-Major sources (Canada, Russia) don't transit Hormuz. UK has Woodsmith Mine polyhalite (14% K2O, targeting 2030 production).
+Major sources (Canada, Russia) don't transit Hormuz. UK has Woodsmith Mine polyhalite (14% K₂O, targeting 2030 production).
 
-### Decision Logic Structure
+### Decision logic structure
 
 ```
 IF nitrogen_deficiency:
   primary: CAN 27% (EU-sourced, no volatilisation)
-  budget: Digestate (near-zero cost, if local AD plant)
+  budget:  Digestate (near-zero cost, if local AD plant)
   organic: Blood meal or cover crops (6-month lead time)
-  
+
 IF phosphorus_deficiency:
   primary: SSP or TSP
   organic: Bone meal (acid soils) or mycorrhizal inoculants
-  
+
 IF potassium_deficiency:
   primary: SOP (Germany/Chile sourced)
   organic: Wood ash, seaweed extracts
 ```
 
+> Status: aspirational. The pitch differentiator. Not in code.
+
 ---
 
-## 6. Competitive Analysis
+## 6. Competitive landscape (summary)
 
-### Direct Competitors
+Full teardown in [`competitive-analysis.md`](competitive-analysis.md). Highlights:
 
 | Platform | Satellite | Phone AI | VRA Export | Fertiliser Alternatives | UK Market | Free Tier |
-|---|---|---|---|---|---|---|
-| **YaraPlus/Atfarm** | Yes (NDVI) | Yes (photo analysis) | Yes (John Deere) | NO (sells own products) | YES | Yes |
-| **OneSoil** | Yes (Sentinel-2) | No | Limited | No | Partial | Yes |
-| **Ackerprofi** | Biomass maps | No | Yes (Shapefile) | No | No (Germany) | 30-day trial |
-| **Cropio** (Syngenta) | Yes | No | Yes | No | Enterprise only | No |
-| **xarvio** (BASF) | Yes | Yes | Yes | No (product-tied) | Yes | Partial |
-| **CropGuard** | Yes (NDVI) | Yes (Claude Vision) | Yes (ISOXML) | **YES** (unique!) | YES | Yes |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| YaraPlus / Atfarm | Yes (NDVI, N only) | Yes | Yes (John Deere) | NO (sells own) | YES | Yes |
+| OneSoil | Yes (Sentinel-2) | No | Limited | No | Partial | Yes |
+| Ackerprofi | No | No | Yes (Shapefile) | No | No (DE) | 30-day trial |
+| Cropwise (Syngenta) | Yes | No | Yes | No | Enterprise | No |
+| xarvio (BASF) | Yes | Yes | Yes | No (product-tied) | Yes | Partial |
+| Climate FieldView (Bayer) | Yes (paid) | No | Yes | No | No (US-first) | Basic free |
+| Plantix | No | Yes | No | No | No | Yes |
+| **CropGuard** | **Yes** | **Yes** | **(planned)** | **Yes (planned, unique)** | **Yes (planned)** | **Yes** |
 
-### CropGuard's Unique Angle
+### CropGuard's unique angles
 
-1. **Supply chain disruption intelligence** — No competitor addresses fertiliser alternatives under geopolitical risk. This is completely unique.
-2. **Vendor-neutral** — YaraPlus pushes Yara products. xarvio pushes BASF. CropGuard recommends best option regardless of brand.
-3. **UK-first** — CROME integration, UK Land Registry, UK-available alternatives (CAN, digestate, polyhalite context).
-4. **Atfarm closing 2026** — Users being forced to migrate. Disruption window.
+1. **Phone camera + satellite fusion** — Plantix does camera only, OneSoil/xarvio do satellite only. Nobody combines both for a unified crop-health + recommendation engine.
+2. **Supply-chain disruption intelligence** — fertiliser alternatives engine for Hormuz / sanctions / shock scenarios. Zero competitors do this.
+3. **Vendor-neutral** — YaraPlus pushes Yara, xarvio pushes BASF. CropGuard recommends best option regardless of brand.
+4. **UK-first** (planned) — CROME integration, postcodes.io, AHDB RB209 reference rates, UK-available alternatives.
+5. **Atfarm sunset window** — Atfarm appears to be transitioning out; users being forced to migrate.
 
-### Ackerprofi Detail
+### Pitch positioning
 
-- Digital field record system (Ackerschlagkartei) for German DüV compliance
-- Pricing: €99/year (< 20ha) or €149 base + €0.10-1.00/ha
-- Features: field import, nutrient balance, regulatory reports, precision farming maps
-- Lesson: automate imports (don't make farmers enter data manually)
-
-### YaraPlus Detail (UK)
-
-- Variable rate application maps
-- Photo analysis for N-uptake
-- Satellite crop monitoring
-- N-Tester BT handheld integration
-- John Deere Operations Center sync
-- Automatic field boundary detection
-- FREE — funded by Yara fertiliser sales
+> "While xarvio optimises when to spray and OneSoil shows where crops are struggling, CropGuard is the only platform that tells UK farmers what to do when their usual fertiliser supply is cut off — combining phone-based crop assessment with satellite monitoring to recommend accessible alternatives."
 
 ---
 
-## 7. Hackathon MVP Architecture (3 Hours)
+## 7. Hackathon precedents
 
-### Recommended Stack
+Successful satellite + AI hackathon projects share these traits:
+- **Single real satellite API call** visible in the demo (judges love real data)
+- **LLM as the "ML pipeline"** — nobody builds a CNN in 3 hours
+- **Visual output** — coloured maps and overlays beat text-only results
+- **Export / actionable output** — shows you thought about the user's next step
+- **Mobile-friendly** — judges testing on phones win extra points
 
-| Component | Choice | Why |
-|---|---|---|
-| Frontend | Next.js or React + Vite | Fast setup, good map libs |
-| Map | Leaflet + leaflet-draw | Free, lightweight, drawing tools |
-| Backend | Python FastAPI | sentinelhub + isoxml libs are Python |
-| Image AI | Claude Vision API | No training, any crop, structured output |
-| Satellite | Copernicus Data Space (sentinelhub-py) | Free, pre-computed NDVI |
-| Recommendation | Claude text API + rules DB | Fast, flexible |
-| Export | isoxml (Python) | 30 lines → tractor-ready ZIP |
-| Field boundaries | CROME + postcodes.io | Free, comprehensive |
-
-### Simplified MVP Flow
-
-```
-1. Farmer uploads photo + enters postcode
-2. Backend:
-   a. Claude Vision → identifies crop issue (N deficiency, disease, etc.)
-   b. postcodes.io → lat/lng → CROME query → field boundary
-   c. Sentinel Hub → NDVI for that bbox/date
-3. Frontend shows:
-   a. Field on map with NDVI overlay (colour-coded health zones)
-   b. AI diagnosis from photo
-   c. Fertiliser recommendation + alternatives table
-   d. "Export to tractor" button → downloads ISOXML ZIP
-```
-
-### Time Budget (3 hours)
-
-| Task | Time | Person |
-|---|---|---|
-| Frontend: upload + map + results display | 90 min | Person 1 |
-| Backend: FastAPI + Claude Vision + recommendation engine | 90 min | Person 2 |
-| Satellite: Sentinel Hub NDVI integration | 60 min | Person 3 |
-| ISOXML export + demo data prep | 60 min | Person 3/4 |
-| Integration + testing | 30 min | All |
-| Demo prep + presentation | 30 min | All |
-
-### What to Mock/Simplify for Demo
-
-- CROME: pre-download a small area GeoPackage for demo region
-- Satellite: if API is slow, pre-cache NDVI tiles for demo coordinates
-- Recommendation DB: hardcode 10-15 fertiliser products with costs and risk scores
-- Export: generate real ISOXML but from simplified zone data
-
-### What Must Be Real (Impresses Judges)
-
-- Claude Vision actually analyzing uploaded photo (live)
-- At least one real Sentinel Hub API call returning NDVI
-- Real ISOXML file that could theoretically load in a tractor terminal
-- Supply chain alternative logic that responds to "Hormuz blockade" toggle
+Notable repos:
+- `sentinel-hub/sentinelhub-js` (57 stars) — official JS library, overkill for a hackathon. Raw fetch to Process API is simpler.
+- `zcernigoj/SH_APIs_LeafletExample` — perfect reference: 6 files, shows auth + Leaflet + Process API integration without library wrappers.
+- `HorizonAuto/plug_and_play` — recent hackathon winner using FastAPI + Claude Vision. Same architecture pattern.
+- `FallenStark/bioskins` — Next.js + FastAPI + Claude Vision + analysis pipeline. Proves the pattern.
 
 ---
 
-## 8. Key Takeaways
+## 8. Open questions
 
-1. **Sentinel Hub via Copernicus Data Space** = fastest satellite API to integrate. Server-side NDVI, one API call, free.
-2. **Claude Vision API** = best phone image analyzer for hackathon. No training, handles everything, $0.01/image.
-3. **CROME dataset** = free field boundaries for all of England with crop types. Use with postcodes.io for geocoding.
-4. **`pip install isoxml`** = generates tractor-ready prescription maps in 30 lines of Python.
-5. **CAN (27% N)** = primary fertiliser alternative to urea. EU-sourced, no Hormuz dependency.
-6. **No competitor combines phone AI + satellite + fertiliser alternatives under supply disruption** — this is CropGuard's unique angle.
-7. **YaraPlus is vendor-locked** (Yara products only) and Atfarm is closing 2026 — market opportunity.
+Consolidated. Each needs an owner and (where time permits) a target resolution.
 
-## 9. Sources & Attribution
+### Architectural divergence (raised by the actual scaffold vs the pitch docs)
 
-- [Source: Copernicus Data Space Ecosystem] — Sentinel-2 API, auth, evalscripts
-- [Source: data.gov.uk] — CROME 2024 dataset availability
-- [Source: Josephinum-Research/isoxml-py on GitHub] — Python ISOXML library
-- [Source: HuggingFace model cards] — satlas-pretrain, EuroSAT, S4A, francecrops assessments
-- [Source: uk.yaraplus.com] — YaraPlus features and positioning (scraped 2026-05-09)
-- [Source: ackerprofi.de] — Ackerprofi features and pricing (scraped 2026-05-09)
-- [Source: AHDB RB209] — UK nutrient management guidelines
-- [Source: IFA/World Bank] — Global fertiliser trade route data
-- [Inference] — Supply chain risk scores and cost projections
-- [Inference] — Hackathon time budgets based on typical integration complexity
+- **Project name.** YieldMaxxing (repo) vs CropGuard (product) vs FarmWise (code). Pick one.
+- **Annotation UX.** Bounding boxes on the RGB image (current code) vs polygon draw on a Leaflet map (pitch). Picking polygons means refactoring `BoundingBox` → polygon GeoJSON, plus changes to `optimizer_node`.
+- **Single FastAPI vs Go+Python split.** Pitch said one service; code is two. Keep the split (it works).
+- **Sentinel Hub endpoint.** Code uses commercial endpoint; pitch + this doc reference the free Copernicus Data Space tier. Switch to free tier if hackathon credits are tight.
+- **Fabian's frontend orphan branch.** Merge / rebase / rebuild. Decide with Fabian.
 
-## 10. Methodology
+### Calibration
+
+How do we ground-truth zone-level recommendations without years of farm-specific yield maps?
+
+Likely answer: regional agronomic priors derived from LUCAS + published trials, used as a baseline; continuously improve as users upload yield data, lab tests, and (optionally) drone or N-sensor data. Open: how do we communicate confidence to the farmer when the baseline is the only signal?
+
+### Fertilizer-type recommendation engine
+
+What's the decision tree that picks CAN vs urea vs UAN vs ammonium sulfate, DAP vs MAP, MOP vs SOP?
+
+Inputs: soil pH, drainage class, application timing, weather forecast, current price ratios. Authoring this credibly will require an agronomic advisory board (university extensions, neutral co-ops). Open: who's on it, how is it versioned, how is reasoning surfaced to the farmer?
+
+### Distribution & business model
+
+The product is free to the farmer. Who pays?
+
+- Co-ops paying for fleet-wide deployment
+- Government / CAP eco-schemes funding rollout against environmental targets
+- Insurance partners underwriting yield/quality outcomes
+- Carbon programs paying for measured N₂O reductions
+
+Each pulls the product in a different direction (carbon needs measurement rigor; co-ops need multi-farm dashboards).
+
+### Trust
+
+Why would a farmer trust a free tool over Yara? Endorsements from neutral bodies (universities, ag extensions, farmer co-ops) matter more than any feature. Open: which 2–3 endorsement partners do we approach in Phase 1, and what evidence package do they need?
+
+### Hackathon-specific
+
+- **UK-vs-EU geographic wedge.** UK farm economics (avg ~87 ha) and the Atfarm sunset argue for staying UK; corn intensity and the €480M–€720M EU waste opportunity argue EU. Pick one for v1 launch.
+- **Supply-chain alternatives data freshness.** Real-time fertiliser prices weren't available during research — estimates used. Production version needs a price feed (Argus? IFA? scraped retailer data?).
+- **ISOXML compatibility QA.** Library is universal in theory; which 2–3 spreader brands do we actually QA on hardware before claiming compatibility?
+- **Claude Vision accuracy on UK varieties.** No fine-tuning — Claude Vision is the entire ML pipeline. Open: how often is it wrong, and what's the failure mode the farmer sees (silent miscall vs low-confidence flag)?
+- **`analyzing` job status not emitted.** Defined in `models/job.go` but never set in the Go handlers. Wire it up for tighter pipeline-progress UX, or remove.
+
+---
+
+## Sources & attribution
+
+- Copernicus Data Space Ecosystem — Sentinel-2 API, auth, evalscripts
+- data.gov.uk — CROME 2024 dataset
+- Josephinum-Research/isoxml-py on GitHub — Python ISOXML library
+- HuggingFace model cards — satlas-pretrain, EuroSAT, S4A, francecrops assessments
+- uk.yaraplus.com — YaraPlus features (scraped 2026-05-09)
+- ackerprofi.de — Ackerprofi features and pricing (scraped 2026-05-09)
+- AHDB RB209 — UK nutrient management guidelines
+- AHDB Maize Crop Nutrition guidance — reference rates
+- IFA / World Bank — global fertiliser trade route data
+- Argus Media — "Shake-up in EU fertilizer pricing to hit farmer costs" (Jan 2026); EU grain maize area projections (Apr 2026)
+- AGPM — French maize area forecast 2026
+- Verdant Robotics — "Why Fertilizer Prices Are Rising in 2026"
+- World Bank Commodity Markets Outlook, 2026
+- Farmdesk — "Updated standard fertilizer costs 2023–2024" (NL benchmark)
+- DTN Retail Fertilizer Trends, April 2026
+- Farmers National Company — EU fertilizer price commentary, 2026
+- ScienceDirect — "Assessing yield and fertilizer response in heterogeneous smallholder fields with UAVs and satellites"
+- Reprodgroup — "Relative Assessment of Fertilizer Application Techniques for Enhancing Nutrient Use Efficiency" (2025 meta-analysis)
+- Bayer Climate FieldView, Yara Atfarm, BASF xarvio, John Deere Operations Center — product documentation (2024–2026)
+- [Inference] supply-chain risk scores, cost projections, hackathon time budgets
+
+---
+
+## Methodology
 
 - 7 parallel research agents covering: satellite APIs, ML models, tractor formats, UK land data, fertiliser alternatives, competitive analysis, MVP architecture
-- 2 web scraping agents using WebFetch for HuggingFace + competitor pages
+- 2 web-scraping agents using WebFetch (HuggingFace + competitor pages)
 - Firecrawl CLI for direct URL scraping (Ackerprofi, YaraPlus, Atfarm)
-- Firecrawl search for ISOXML libraries and CROME data
 - Cross-referenced findings across agents for consistency
-- Gaps: Planet Labs pricing not fully verified; Woodsmith Mine production timeline approximate; real-time fertiliser prices not available (estimates used)
+- **Gaps:** Planet Labs pricing not fully verified; Woodsmith Mine production timeline approximate; real-time fertiliser prices not available (estimates used).
