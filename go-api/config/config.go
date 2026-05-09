@@ -26,7 +26,7 @@ func Load() *Config {
 		AppURL:             getEnv("APP_URL", "http://localhost:3000"),
 		PublicURL:          getEnv("PUBLIC_URL", "http://localhost:8080"),
 		AgentServiceURL:    getEnv("AGENT_SERVICE_URL", "http://python-agents:8001"),
-		Port:               getEnv("PORT", "8080"),
+		Port:               getEnv("PORT", "9847"),
 		SHClientID:         getEnv("SH_CLIENT_ID", ""),
 		SHClientSecret:     getEnv("SH_CLIENT_SECRET", ""),
 	}

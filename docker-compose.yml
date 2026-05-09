@@ -21,7 +21,7 @@ services:
   go-api:
     build: ./go-api
     ports:
-      - "8080:8080"
+      - "9847:9847"
     environment:
       - DATABASE_URL=postgres://yieldmaxxing:yieldmaxxing@postgres:5432/yieldmaxxing?sslmode=disable
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
@@ -30,7 +30,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - APP_URL=${APP_URL}
       - AGENT_SERVICE_URL=http://python-agents:8001
-      - PUBLIC_URL=${PUBLIC_URL:-http://localhost:8080}
+      - PUBLIC_URL=${PUBLIC_URL:-http://localhost:9847}
     depends_on:
       postgres:
         condition: service_healthy

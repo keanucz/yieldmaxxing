@@ -4,7 +4,7 @@ services:
     container_name: yieldmaxxing-api
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "9847:9847"
     environment:
       - DATABASE_URL=postgres://yieldmaxxing:${POSTGRES_PASSWORD}@postgres:5432/yieldmaxxing
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
