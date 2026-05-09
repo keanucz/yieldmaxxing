@@ -31,7 +31,7 @@ async def field_detector_node(state: FarmState) -> dict:
     for i, region in enumerate(regions):
         if region.area < 100:  # skip tiny blobs
             continue
-        min_row, min_col, max_row, max_col = region.bbox
+        min_row, min_col, max_row, max_col = (int(v) for v in region.bbox)
         fields.append({
             "id": i,
             "x": round(min_col / w, 4),
@@ -39,7 +39,7 @@ async def field_detector_node(state: FarmState) -> dict:
             "w": round((max_col - min_col) / w, 4),
             "h": round((max_row - min_row) / h, 4),
             "ndvi_mean": round(float(np.nanmean(ndvi[min_row:max_row, min_col:max_col])), 3),
-            "pixel_area": region.area,
+            "pixel_area": int(region.area),
         })
 
     # Sort by size descending

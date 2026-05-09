@@ -4,11 +4,11 @@ import json
 import os
 from pathlib import Path
 
-import anthropic
+from openai import OpenAI
 
 from state import FarmState
 
-_client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 _KNOWLEDGE_PATH = Path(__file__).parent.parent / "knowledge" / "corn.json"
 _CORN_KNOWLEDGE = json.loads(_KNOWLEDGE_PATH.read_text())
@@ -37,8 +37,6 @@ async def optimizer_node(state: FarmState) -> dict:
 
     selected_fields = [f for f in detected_fields if f["id"] in selected_ids] if selected_ids else detected_fields
 
-    fields_desc = json.dumps(selected_fields, indent=2)
-    issues_desc = json.dumps(crop_analysis.get("issues", []), indent=2)
     ndvi = satellite["ndvi_data"]
 
     user_message = f"""Generate a crop management plan for this farm.
@@ -50,13 +48,13 @@ Date range: {state['date_start']} to {state['date_end']}
 Health score: {crop_analysis['health_score']}/100
 Summary: {crop_analysis['summary']}
 Detected issues:
-{issues_desc}
+{json.dumps(crop_analysis.get('issues', []), indent=2)}
 
 --- Satellite NDVI statistics (whole farm) ---
 Mean: {ndvi['mean']:.3f}, Min: {ndvi['min']:.3f}, Max: {ndvi['max']:.3f}, Std: {ndvi['std']:.3f}
 
---- Selected fields for analysis ---
-{fields_desc}
+--- Selected fields ---
+{json.dumps(selected_fields, indent=2)}
 
 Respond with this JSON:
 {{
@@ -66,12 +64,12 @@ Respond with this JSON:
       "field_id": 0,
       "ndvi_mean": 0.0,
       "health": "excellent|good|fair|poor|critical",
-      "issues": ["list of issues detected in this field"],
+      "issues": ["list of issues"],
       "actions": [
         {{
           "priority": "urgent|high|medium|low",
           "action": "Specific action",
-          "timing": "When to do it",
+          "timing": "When",
           "estimated_cost": "$X/acre"
         }}
       ]
@@ -85,16 +83,18 @@ Respond with this JSON:
       "estimated_cost": "$X/acre"
     }}
   ],
-  "executive_summary": "3-4 sentences summarising what was found and what to do",
+  "executive_summary": "3-4 sentences summarising findings and next steps",
   "estimated_yield_impact": "e.g. 15-25% yield reduction if untreated"
 }}"""
 
-    response = _client.messages.create(
-        model="claude-opus-4-7",
+    response = _client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
         max_tokens=2048,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
     )
 
-    final_report = json.loads(response.content[0].text.strip())
+    final_report = json.loads(response.choices[0].message.content.strip())
     return {"final_report": final_report}

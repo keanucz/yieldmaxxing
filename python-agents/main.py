@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langgraph.types import Command
 
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="FarmWise Agent Service", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 # ---- request/response models ----
@@ -77,9 +79,7 @@ async def run_pipeline(req: RunRequest):
 
     try:
         # Run until interrupt
-        result = await asyncio.to_thread(
-            graph.invoke, initial_state, thread_config
-        )
+        result = await graph.ainvoke(initial_state, thread_config)
     except Exception as e:
         return JobStatusResponse(
             job_id=req.job_id,
@@ -106,8 +106,7 @@ async def resume_pipeline(req: ResumeRequest):
     thread_config = {"configurable": {"thread_id": req.job_id}}
 
     try:
-        result = await asyncio.to_thread(
-            graph.invoke,
+        result = await graph.ainvoke(
             Command(resume=req.selected_field_ids),
             thread_config,
         )
