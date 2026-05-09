@@ -1,50 +1,43 @@
 """LangGraph workflow definition for the FarmWise agent pipeline."""
 
-from typing import TypedDict, Optional, Any
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.types import interrupt, Command
+from langgraph.types import interrupt
+
+from state import FarmState
 
 
-class FarmState(TypedDict):
-    job_id: str
-    location: dict           # {lat, lon, name}
-    date_start: str
-    date_end: str
-    crop_image_base64: Optional[str]  # photo uploaded by farmer
-    satellite_images: Optional[dict]
-    crop_analysis: Optional[dict]
-    annotations: Optional[list]
-    final_report: Optional[dict]
-
-
-def _annotation_interrupt_node(state: FarmState) -> dict:
-    """Pauses the graph and waits for farmer to annotate bounding boxes."""
-    annotations = interrupt({
-        "type": "annotation_required",
-        "satellite_images": state["satellite_images"],
+def _field_selection_interrupt(state: FarmState) -> dict:
+    """Pauses and returns detected fields to the frontend for user selection."""
+    selected_ids = interrupt({
+        "type": "field_selection_required",
+        "rgb_url": state["satellite_images"]["rgb_url"],
+        "detected_fields": state["detected_fields"],
         "crop_analysis": state["crop_analysis"],
-        "message": "Please annotate the areas of concern on the satellite imagery.",
+        "message": "Select which fields you want to analyse.",
     })
-    return {"annotations": annotations}
+    return {"selected_field_ids": selected_ids}
 
 
 def build_graph():
-    from nodes.satellite import satellite_fetch_node
     from nodes.analyzer import crop_analyze_node
+    from nodes.satellite import satellite_fetch_node
+    from nodes.field_detector import field_detector_node
     from nodes.optimizer import optimizer_node
 
     builder = StateGraph(FarmState)
 
-    builder.add_node("satellite_fetch", satellite_fetch_node)
     builder.add_node("crop_analyze", crop_analyze_node)
-    builder.add_node("annotation_interrupt", _annotation_interrupt_node)
+    builder.add_node("satellite_fetch", satellite_fetch_node)
+    builder.add_node("field_detect", field_detector_node)
+    builder.add_node("field_selection", _field_selection_interrupt)
     builder.add_node("optimizer", optimizer_node)
 
-    builder.set_entry_point("satellite_fetch")
-    builder.add_edge("satellite_fetch", "crop_analyze")
-    builder.add_edge("crop_analyze", "annotation_interrupt")
-    builder.add_edge("annotation_interrupt", "optimizer")
+    builder.set_entry_point("crop_analyze")
+    builder.add_edge("crop_analyze", "satellite_fetch")
+    builder.add_edge("satellite_fetch", "field_detect")
+    builder.add_edge("field_detect", "field_selection")
+    builder.add_edge("field_selection", "optimizer")
     builder.add_edge("optimizer", END)
 
     checkpointer = MemorySaver()

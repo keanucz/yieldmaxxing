@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YieldMaxxing — Map + Fields Test</title>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.css" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; height: 100vh; }
+    #sidebar { width: 380px; padding: 16px; overflow-y: auto; background: #f8fafc; border-right: 1px solid #e2e8f0; }
+    #map { flex: 1; }
+    h1 { font-size: 1.2em; margin-bottom: 12px; color: #16a34a; }
+    h2 { font-size: 0.9em; margin: 16px 0 8px; color: #334155; text-transform: uppercase; letter-spacing: 0.5px; }
+    label { display: block; font-size: 0.85em; color: #475569; margin-bottom: 4px; }
+    input, select, button { width: 100%; padding: 8px 12px; margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9em; }
+    button { background: #16a34a; color: white; border: none; cursor: pointer; font-weight: 600; }
+    button:hover { background: #15803d; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    .btn-blue { background: #3b82f6; }
+    .btn-blue:hover { background: #2563eb; }
+    .btn-orange { background: #ea580c; }
+    .btn-orange:hover { background: #c2410c; }
+    #log { font-family: monospace; font-size: 0.75em; background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 6px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+    #ndvi-thumb { position: absolute; top: 10px; right: 10px; z-index: 10; background: white; border-radius: 8px; padding: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); display: none; }
+    #ndvi-thumb img { border-radius: 6px; max-width: 180px; }
+    .info-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 8px; margin-bottom: 8px; font-size: 0.8em; }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <h1>YieldMaxxing — Go API Test</h1>
+    <div class="info-box">
+      Tests: <code>/api/geocode</code>, <code>/api/fields</code>, <code>/api/satellite/*</code><br>
+      Backend must be running on <code>:8080</code>
+    </div>
+
+    <h2>1. Geocode Postcode</h2>
+    <label>UK Postcode</label>
+    <input type="text" id="postcode" placeholder="PE7 3HJ" value="LN4 4TQ">
+    <button onclick="geocode()">Geocode and Fly</button>
+
+    <h2>2. CROME 2025 Field Boundaries</h2>
+    <label>Radius (km)</label>
+    <input type="number" id="radius" value="0.5" step="0.1" min="0.1" max="5">
+    <button class="btn-blue" onclick="fetchFields()">Fetch CROME Fields</button>
+    <div id="field-info"></div>
+
+    <h2>3. Sentinel-2 Satellite</h2>
+    <button class="btn-orange" onclick="fetchNDVI()">NDVI Tile</button>
+    <button class="btn-orange" onclick="fetchRGB()">RGB Tile</button>
+
+    <h2>Log</h2>
+    <div id="log"></div>
+  </div>
+
+  <div id="map"></div>
+  <div id="ndvi-thumb"><img id="sat-img"></div>
+
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.4/mapbox-gl.js"></script>
+  <script>
+    const API = 'http://localhost:8080';
+    let currentLat = 53.0, currentLon = -0.25, currentCounty = 'lincolnshire';
+
+    // Set your Mapbox token here or via ?token= query param
+    mapboxgl.accessToken = new URLSearchParams(window.location.search).get('token') || 'YOUR_MAPBOX_TOKEN';
+
+    const map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/mapbox/satellite-streets-v12',
+      center: [currentLon, currentLat],
+      zoom: 14,
+    });
+
+    map.addControl(new mapboxgl.NavigationControl());
+
+    map.on('load', () => {
+      map.addSource('crome-fields', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addLayer({
+        id: 'crome-fill',
+        type: 'fill',
+        source: 'crome-fields',
+        paint: { 'fill-color': '#22c55e', 'fill-opacity': 0.25 },
+      });
+      map.addLayer({
+        id: 'crome-outline',
+        type: 'line',
+        source: 'crome-fields',
+        paint: { 'line-color': '#16a34a', 'line-width': 2 },
+      });
+      map.addLayer({
+        id: 'crome-highlight',
+        type: 'fill',
+        source: 'crome-fields',
+        paint: { 'fill-color': '#fbbf24', 'fill-opacity': 0.5 },
+        filter: ['==', 'cromeid', ''],
+      });
+
+      map.on('click', 'crome-fill', (e) => {
+        if (!e.features || e.features.length === 0) return;
+        const f = e.features[0];
+        const props = f.properties;
+        map.setFilter('crome-highlight', ['==', 'cromeid', props.cromeid]);
+        log('Selected: ' + props.cromeid + ' | lucode: ' + props.lucode + ' | prob: ' + props.prob);
+        new mapboxgl.Popup({ closeOnClick: true })
+          .setLngLat(e.lngLat)
+          .setText(props.cromeid + ' — lucode: ' + props.lucode + ', prob: ' + (props.prob * 100).toFixed(1) + '%')
+          .addTo(map);
+      });
+
+      map.on('mouseenter', 'crome-fill', () => { map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mouseleave', 'crome-fill', () => { map.getCanvas().style.cursor = ''; });
+
+      log('Map ready. Enter a postcode and click Geocode.');
+    });
+
+    function log(msg) {
+      const el = document.getElementById('log');
+      const ts = new Date().toLocaleTimeString();
+      el.textContent = '[' + ts + '] ' + msg + '\n' + el.textContent;
+    }
+
+    async function geocode() {
+      const pc = document.getElementById('postcode').value.trim();
+      if (!pc) return;
+      log('Geocoding "' + pc + '"...');
+
+      try {
+        const resp = await fetch(API + '/api/geocode?postcode=' + encodeURIComponent(pc));
+        const data = await resp.json();
+        if (!resp.ok) { log('ERROR: ' + data.error); return; }
+
+        currentLat = data.lat;
+        currentLon = data.lon;
+        currentCounty = (data.county || data.district || '').toLowerCase();
+
+        log('OK ' + data.postcode + ' -> [' + data.lat.toFixed(5) + ', ' + data.lon.toFixed(5) + ']');
+        log('  County: ' + (currentCounty || '(not resolved)'));
+
+        map.flyTo({ center: [data.lon, data.lat], zoom: 15, duration: 2000 });
+        setTimeout(fetchFields, 2500);
+      } catch (e) {
+        log('NETWORK ERROR: ' + e.message);
+      }
+    }
+
+    async function fetchFields() {
+      const radius = parseFloat(document.getElementById('radius').value) || 0.5;
+      log('Fetching CROME 2025 fields (r=' + radius + 'km, county=' + currentCounty + ')...');
+
+      const params = new URLSearchParams({
+        lat: currentLat.toString(),
+        lon: currentLon.toString(),
+        radius_km: radius.toString(),
+        county: currentCounty,
+        limit: '500',
+      });
+
+      try {
+        const resp = await fetch(API + '/api/fields?' + params);
+        if (!resp.ok) {
+          const err = await resp.json();
+          log('ERROR: ' + err.error + ' ' + (err.detail || ''));
+          return;
+        }
+        const geojson = await resp.json();
+        const count = (geojson.features && geojson.features.length) || 0;
+        log('OK ' + count + ' field polygons received');
+
+        map.getSource('crome-fields').setData(geojson);
+        document.getElementById('field-info').textContent = count + ' fields loaded. Click a field on the map to inspect.';
+      } catch (e) {
+        log('NETWORK ERROR: ' + e.message);
+      }
+    }
+
+    async function fetchNDVI() {
+      await fetchSatellite('ndvi');
+    }
+
+    async function fetchRGB() {
+      await fetchSatellite('rgb');
+    }
+
+    async function fetchSatellite(type) {
+      log('Fetching ' + type.toUpperCase() + ' tile...');
+      const params = new URLSearchParams({
+        lat: currentLat.toString(),
+        lon: currentLon.toString(),
+        radius_km: '1',
+        width: '512',
+        height: '512',
+      });
+
+      try {
+        const resp = await fetch(API + '/api/satellite/' + type + '?' + params, { credentials: 'include' });
+        if (!resp.ok) {
+          log('ERROR ' + resp.status + ': auth required or Sentinel Hub not configured');
+          return;
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        document.getElementById('sat-img').src = url;
+        document.getElementById('ndvi-thumb').style.display = 'block';
+        log('OK ' + type.toUpperCase() + ' tile: ' + (blob.size / 1024).toFixed(1) + ' KB');
+
+        const bboxHeader = resp.headers.get('X-BBox');
+        if (bboxHeader) log('  BBox: ' + bboxHeader);
+      } catch (e) {
+        log('NETWORK ERROR: ' + e.message);
+      }
+    }
+  </script>
+</body>
+</html>

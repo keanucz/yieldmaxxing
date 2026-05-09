@@ -64,19 +64,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: [build-api, build-agents]
-
-    steps:
-      - name: Deploy to Unraid via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: 100.85.82.61
-          username: root
-          key: ${{ secrets.UNRAID_SSH_KEY }}
-          script: |
-            cd /mnt/user/appdata/repos/yieldmaxxing
-            docker compose pull
-            docker compose up -d
-            chown -R 99:100 /mnt/user/appdata/repos/yieldmaxxing
+  # Komodo (on Unraid) watches GHCR for new :latest tags and auto-deploys.
+  # If you need manual redeploy, SSH to kiwi (100.85.82.61) via Tailscale:
+  #   ssh root@100.85.82.61 "cd /mnt/user/appdata/repos/yieldmaxxing && docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d"

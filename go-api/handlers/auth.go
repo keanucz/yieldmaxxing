@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,11 +11,9 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/hackathon/cropguard/config"
 	"github.com/hackathon/cropguard/db"
-	"github.com/hackathon/cropguard/middleware"
 	"github.com/hackathon/cropguard/models"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -41,9 +41,7 @@ func GoogleLogin(c *fiber.Ctx) error {
 func GoogleCallback(c *fiber.Ctx) error {
 	code := c.Query("code")
 	if code == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "missing code parameter",
-		})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing code parameter"})
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -70,16 +68,14 @@ func GoogleCallback(c *fiber.Ctx) error {
 		})
 	}
 
-	jwtToken, err := generateJWT(user)
+	sessionID, err := createSession(ctx, user.ID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "failed to generate token",
-		})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to create session"})
 	}
 
 	c.Cookie(&fiber.Cookie{
-		Name:     "token",
-		Value:    jwtToken,
+		Name:     "session",
+		Value:    sessionID,
 		HTTPOnly: true,
 		Secure:   true,
 		SameSite: "Lax",
@@ -91,8 +87,15 @@ func GoogleCallback(c *fiber.Ctx) error {
 }
 
 func Logout(c *fiber.Ctx) error {
+	sessionID := c.Cookies("session")
+	if sessionID != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		db.Pool.Exec(ctx, "DELETE FROM sessions WHERE id = $1", sessionID)
+	}
+
 	c.Cookie(&fiber.Cookie{
-		Name:     "token",
+		Name:     "session",
 		Value:    "",
 		HTTPOnly: true,
 		Secure:   true,
@@ -123,11 +126,11 @@ func GetMe(c *fiber.Ctx) error {
 // --- helpers ---
 
 type googleUserInfo struct {
-	Email     string `json:"email"`
-	Name      string `json:"name"`
-	Picture   string `json:"picture"`
-	Sub       string `json:"sub"`
-	Verified  bool   `json:"email_verified"`
+	Email    string `json:"email"`
+	Name     string `json:"name"`
+	Picture  string `json:"picture"`
+	Sub      string `json:"sub"`
+	Verified bool   `json:"email_verified"`
 }
 
 func fetchGoogleUserInfo(ctx context.Context, accessToken string) (*googleUserInfo, error) {
@@ -157,7 +160,6 @@ func fetchGoogleUserInfo(ctx context.Context, accessToken string) (*googleUserIn
 
 func upsertUser(ctx context.Context, info *googleUserInfo) (*models.User, error) {
 	var user models.User
-
 	err := db.Pool.QueryRow(ctx,
 		`INSERT INTO users (id, email, name, avatar_url, provider)
 		 VALUES ($1, $2, $3, $4, $5)
@@ -170,22 +172,23 @@ func upsertUser(ctx context.Context, info *googleUserInfo) (*models.User, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upsert user: %w", err)
 	}
-
 	return &user, nil
 }
 
-func generateJWT(user *models.User) (string, error) {
-	claims := middleware.JWTClaims{
-		UserID:    user.ID,
-		Email:     user.Email,
-		Name:      user.Name,
-		AvatarURL: user.AvatarURL,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
+func createSession(ctx context.Context, userID string) (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
 	}
+	sessionID := hex.EncodeToString(b)
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(appConfig.JWTSecret))
+	_, err := db.Pool.Exec(ctx,
+		"INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)",
+		sessionID, userID, expiresAt,
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to insert session: %w", err)
+	}
+	return sessionID, nil
 }
