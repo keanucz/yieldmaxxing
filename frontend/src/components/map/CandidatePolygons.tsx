@@ -1,13 +1,15 @@
 import { Polygon, Tooltip } from "react-leaflet";
 import type { FieldFeature } from "../../types";
-import { ringToLatLngs } from "../../lib/geo";
-import { ringAreaHa } from "../../lib/geo";
+import { ringToLatLngs, ringAreaHa } from "../../lib/geo";
 
 interface Props {
   candidates: FieldFeature[];
   selectedIds: Set<string>;
   onToggle: (cromeId: string) => void;
 }
+
+// Only show permanent labels on fields large enough to avoid clutter.
+const LABEL_MIN_HA = 2;
 
 export default function CandidatePolygons({
   candidates,
@@ -20,7 +22,8 @@ export default function CandidatePolygons({
         const id = f.properties.CROMEID;
         const positions = ringToLatLngs(f.geometry.coordinates[0]);
         const isSelected = selectedIds.has(id);
-        const ha = ringAreaHa(f.geometry.coordinates[0]).toFixed(1);
+        const haValue = ringAreaHa(f.geometry.coordinates[0]);
+        const ha = haValue.toFixed(1);
         return (
           <Polygon
             key={id}
@@ -34,9 +37,11 @@ export default function CandidatePolygons({
             }}
             eventHandlers={{ click: () => onToggle(id) }}
           >
-            <Tooltip direction="center" permanent className="cg-field-label">
-              {ha} ha · {f.properties.LUCODE}
-            </Tooltip>
+            {haValue >= LABEL_MIN_HA && (
+              <Tooltip direction="center" permanent className="cg-field-label">
+                {ha} ha · {f.properties.LUCODE}
+              </Tooltip>
+            )}
           </Polygon>
         );
       })}

@@ -180,7 +180,7 @@ export default function FieldPrescribe() {
             <div className="row">
               <span className="k">Grid</span>
               <span className="v" style={{ fontSize: 11 }}>
-                4×4 zones, DDI 0006
+                8×8 zones, DDI 0006
               </span>
             </div>
           </div>

@@ -20,7 +20,7 @@ export default function OnboardFields() {
 
   useEffect(() => {
     const county = sessionStorage.getItem("yieldmaxxing.onboard.county") || "lincolnshire";
-    fetch(`${API}/api/fields?lat=${center[0]}&lon=${center[1]}&radius_km=1&county=${county}&limit=200`)
+    fetch(`${API}/api/fields?lat=${center[0]}&lon=${center[1]}&radius_km=0.8&county=${county}&limit=1000`)
       .then((r) => (r.ok ? r.json() : null))
       .then((geojson) => {
         if (geojson?.features?.length) {
@@ -35,8 +35,29 @@ export default function OnboardFields() {
               PROB: f.properties?.prob || 0.9,
             },
           }));
-          setCandidates(mapped);
-          setSelected(new Set(mapped.slice(0, 5).map((c) => c.properties.CROMEID)));
+          const MIN_HA = 3;
+          const MAX_HA = 20;
+          const MAX_FIELDS = 20;
+          const filtered = mapped
+            .filter((f) => {
+              const ha = ringAreaHa(f.geometry.coordinates[0]);
+              return ha >= MIN_HA && ha <= MAX_HA;
+            })
+            .sort(
+              (a, b) =>
+                ringAreaHa(b.geometry.coordinates[0]) -
+                ringAreaHa(a.geometry.coordinates[0]),
+            )
+            .slice(0, MAX_FIELDS);
+
+          if (filtered.length >= 5) {
+            setCandidates(filtered);
+            setSelected(new Set(filtered.slice(0, 5).map((c) => c.properties.CROMEID)));
+          } else {
+            const mock = detectFields(center[0], center[1], 7);
+            setCandidates(mock);
+            setSelected(new Set(mock.slice(0, 5).map((c) => c.properties.CROMEID)));
+          }
         } else {
           const mock = detectFields(center[0], center[1], 7);
           setCandidates(mock);

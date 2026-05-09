@@ -4,7 +4,7 @@ import type {
   Prescription,
   PrescriptionZoneFeature,
 } from "../../types";
-import { ringAreaHa } from "../geo";
+import { ringAreaHa, pointInRing } from "../geo";
 import { GRID_SIZE, type NDVIGridCapture } from "./ndvi";
 
 // USD/ton wholesale, May 2026 — Hormuz crisis premium on urea has dragged the
@@ -63,7 +63,7 @@ export function peakSummerCapture(history: NDVIGridCapture[]): NDVIGridCapture {
   return best;
 }
 
-// Build a 3-tier (skip / low / high) prescription map over a 4×4 grid covering
+// Build a 3-tier (skip / low / high) prescription map over an 8×8 grid covering
 // the field bbox, derived from the peak-summer NDVI mean per cell.
 export function buildPrescription(
   field: Field,
@@ -72,8 +72,8 @@ export function buildPrescription(
 ): Prescription {
   const peak = peakSummerCapture(history);
   const [west, south, east, north] = field.bbox;
-  const NX = 4;
-  const NY = 4;
+  const NX = 8;
+  const NY = 8;
   const cellW = GRID_SIZE / NX;
   const cellH = GRID_SIZE / NY;
 
@@ -83,8 +83,14 @@ export function buildPrescription(
   const features: PrescriptionZoneFeature[] = [];
   let zoneId = 1;
 
+  const fieldRing = field.feature.geometry.coordinates[0];
+
   for (let cy = 0; cy < NY; cy++) {
     for (let cx = 0; cx < NX; cx++) {
+      const cellCenterLng = west + ((cx + 0.5) / NX) * (east - west);
+      const cellCenterLat = north - ((cy + 0.5) / NY) * (north - south);
+      if (!pointInRing(cellCenterLng, cellCenterLat, fieldRing)) continue;
+
       let sum = 0;
       let n = 0;
       for (
@@ -107,10 +113,10 @@ export function buildPrescription(
       // gets the heavy dose.
       let rate = 0;
       let band: "skip" | "low" | "high" = "skip";
-      if (mean > 0.78) {
+      if (mean > 0.85) {
         rate = 0;
         band = "skip";
-      } else if (mean >= 0.65) {
+      } else if (mean >= 0.72) {
         rate = 80;
         band = "low";
       } else {

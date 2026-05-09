@@ -103,7 +103,7 @@ jobs:
         run: |
           tar -czf /tmp/frontend-dist.tar.gz -C dist .
           scp -o StrictHostKeyChecking=no /tmp/frontend-dist.tar.gz root@100.85.82.61:/tmp/frontend-dist.tar.gz
-          ssh -o StrictHostKeyChecking=no root@100.85.82.61 "scp /tmp/frontend-dist.tar.gz kiwirp:/tmp/frontend-dist.tar.gz && ssh kiwirp 'sudo rm -rf /opt/yieldmaxxing/dist && sudo mkdir -p /opt/yieldmaxxing/dist && sudo tar -xzf /tmp/frontend-dist.tar.gz -C /opt/yieldmaxxing/dist && rm /tmp/frontend-dist.tar.gz'"
+          ssh -o StrictHostKeyChecking=no root@100.85.82.61 "scp /tmp/frontend-dist.tar.gz wireguard:/tmp/frontend-dist.tar.gz && ssh wireguard 'sudo rm -rf /opt/yieldmaxxing/dist && sudo mkdir -p /opt/yieldmaxxing/dist && sudo tar -xzf /tmp/frontend-dist.tar.gz -C /opt/yieldmaxxing/dist && rm /tmp/frontend-dist.tar.gz'"
 
       - name: Redeploy backend on kiwi
         run: |
