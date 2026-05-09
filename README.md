@@ -7,7 +7,7 @@ Built in 3 hours at a hackathon. It works.
 ## What it does
 
 1. **Farmer uploads a crop photo** and enters their UK postcode
-2. **GPT-4o Vision** identifies diseases, nutrient deficiencies, or pest damage from the image
+2. **GPT-5.5 Vision** identifies diseases, nutrient deficiencies, or pest damage from the image
 3. **Sentinel-2 satellite** fetches NDVI (vegetation health) imagery for the farm area
 4. **CROME 2025 field boundaries** from gov.uk render on the map so the farmer can select their actual fields
 5. **AI optimizer** synthesizes everything into a prioritized treatment plan with cost estimates and timing
@@ -20,7 +20,7 @@ The farmer gets back something actionable. Not a dashboard, not a chart. "Apply 
 ┌─────────────┐      ┌──────────────┐      ┌─────────────────┐
 │   Frontend  │      │   Go API     │      │  Python Agents  │
 │  React/Vite │◄────►│  Fiber :8080 │◄────►│  LangGraph :8001│
-│  Mapbox GL  │      │  pgx/Postgres│      │  GPT-4o Vision  │
+│  Mapbox GL  │      │  pgx/Postgres│      │  GPT-5.5 Vision  │
 └─────────────┘      └──────────────┘      └─────────────────┘
                             │
                      ┌──────┴───────┐

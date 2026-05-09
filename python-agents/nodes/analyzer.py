@@ -61,7 +61,7 @@ Respond with this JSON:
     })
 
     response = _client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-5.5",
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": content},

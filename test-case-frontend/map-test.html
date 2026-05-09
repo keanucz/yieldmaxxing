@@ -62,7 +62,8 @@
     const API = 'http://localhost:8080';
     let currentLat = 53.0, currentLon = -0.25, currentCounty = 'lincolnshire';
 
-    mapboxgl.accessToken = 'YOUR_MAPBOX_TOKEN';
+    // Set your Mapbox token here or via ?token= query param
+    mapboxgl.accessToken = new URLSearchParams(window.location.search).get('token') || 'YOUR_MAPBOX_TOKEN';
 
     const map = new mapboxgl.Map({
       container: 'map',
