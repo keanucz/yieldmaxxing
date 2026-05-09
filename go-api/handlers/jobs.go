@@ -94,7 +94,7 @@ func ListJobs(c *fiber.Ctx) error {
 
 	rows, err := db.Pool.Query(ctx,
 		`SELECT id, user_id, status, location, date_start, date_end, crop_image_base64,
-		        satellite_images, crop_analysis, annotations, final_report, error, created_at, updated_at
+		        satellite_images, crop_analysis, detected_fields, selected_field_ids, final_report, error, created_at, updated_at
 		 FROM jobs WHERE user_id = $1 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to list jobs"})
@@ -135,25 +135,25 @@ func SubmitAnnotations(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	annotationsJSON, _ := json.Marshal(req.Annotations)
+	selectedJSON, _ := json.Marshal(req.SelectedFieldIDs)
 	now := time.Now()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	_, err = db.Pool.Exec(ctx,
-		`UPDATE jobs SET annotations = $1, status = $2, updated_at = $3 WHERE id = $4`,
-		annotationsJSON, string(models.StatusOptimizing), now, id,
+		`UPDATE jobs SET selected_field_ids = $1, status = $2, updated_at = $3 WHERE id = $4`,
+		selectedJSON, string(models.StatusOptimizing), now, id,
 	)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update job"})
 	}
 
-	job.Annotations = req.Annotations
+	job.SelectedFieldIDs = req.SelectedFieldIDs
 	job.Status = models.StatusOptimizing
 	job.UpdatedAt = now
 
-	go resumeAgentWithAnnotations(id, req.Annotations)
+	go resumeAgentWithAnnotations(id, req.SelectedFieldIDs)
 
 	return c.JSON(job)
 }
@@ -166,12 +166,12 @@ type scannable interface {
 
 func scanJob(row scannable) (*models.Job, error) {
 	var job models.Job
-	var locationJSON, satelliteJSON, analysisJSON, annotationsJSON, reportJSON []byte
+	var locationJSON, satelliteJSON, analysisJSON, detectedJSON, selectedJSON, reportJSON []byte
 
 	err := row.Scan(
 		&job.ID, &job.UserID, &job.Status, &locationJSON,
 		&job.DateStart, &job.DateEnd, &job.CropImageBase64,
-		&satelliteJSON, &analysisJSON, &annotationsJSON, &reportJSON,
+		&satelliteJSON, &analysisJSON, &detectedJSON, &selectedJSON, &reportJSON,
 		&job.Error, &job.CreatedAt, &job.UpdatedAt,
 	)
 	if err != nil {
@@ -187,8 +187,11 @@ func scanJob(row scannable) (*models.Job, error) {
 	if analysisJSON != nil {
 		json.Unmarshal(analysisJSON, &job.CropAnalysis)
 	}
-	if annotationsJSON != nil {
-		json.Unmarshal(annotationsJSON, &job.Annotations)
+	if detectedJSON != nil {
+		json.Unmarshal(detectedJSON, &job.DetectedFields)
+	}
+	if selectedJSON != nil {
+		json.Unmarshal(selectedJSON, &job.SelectedFieldIDs)
 	}
 	if reportJSON != nil {
 		json.Unmarshal(reportJSON, &job.FinalReport)
@@ -203,7 +206,7 @@ func loadJob(id, userID string) (*models.Job, error) {
 
 	row := db.Pool.QueryRow(ctx,
 		`SELECT id, user_id, status, location, date_start, date_end, crop_image_base64,
-		        satellite_images, crop_analysis, annotations, final_report, error, created_at, updated_at
+		        satellite_images, crop_analysis, detected_fields, selected_field_ids, final_report, error, created_at, updated_at
 		 FROM jobs WHERE id = $1 AND user_id = $2`, id, userID)
 
 	return scanJob(row)
@@ -220,8 +223,8 @@ type agentStartPayload struct {
 }
 
 type agentResumePayload struct {
-	JobID       string              `json:"job_id"`
-	Annotations []models.BoundingBox `json:"annotations"`
+	JobID            string `json:"job_id"`
+	SelectedFieldIDs []int  `json:"selected_field_ids"`
 }
 
 type agentStatusUpdate struct {
@@ -229,6 +232,7 @@ type agentStatusUpdate struct {
 	Status          models.JobStatus        `json:"status"`
 	SatelliteImages *models.SatelliteImages `json:"satellite_images,omitempty"`
 	CropAnalysis    *models.CropAnalysis    `json:"crop_analysis,omitempty"`
+	DetectedFields  []map[string]any        `json:"detected_fields,omitempty"`
 	FinalReport     *models.FinalReport     `json:"final_report,omitempty"`
 	Error           string                  `json:"error,omitempty"`
 }
@@ -260,8 +264,8 @@ func dispatchToAgents(jobID string, job *models.Job) {
 	applyUpdate(jobID, update)
 }
 
-func resumeAgentWithAnnotations(jobID string, annotations []models.BoundingBox) {
-	payload := agentResumePayload{JobID: jobID, Annotations: annotations}
+func resumeAgentWithAnnotations(jobID string, selectedFieldIDs []int) {
+	payload := agentResumePayload{JobID: jobID, SelectedFieldIDs: selectedFieldIDs}
 	body, _ := json.Marshal(payload)
 
 	resp, err := http.Post(agentServiceURL+"/resume", "application/json", bytes.NewReader(body))
@@ -283,23 +287,30 @@ func applyUpdate(jobID string, update agentStatusUpdate) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var satelliteJSON, analysisJSON, reportJSON []byte
+	var satelliteJSON, analysisJSON, detectedJSON, reportJSON []byte
 	if update.SatelliteImages != nil {
 		satelliteJSON, _ = json.Marshal(update.SatelliteImages)
 	}
 	if update.CropAnalysis != nil {
 		analysisJSON, _ = json.Marshal(update.CropAnalysis)
 	}
+	if update.DetectedFields != nil {
+		detectedJSON, _ = json.Marshal(update.DetectedFields)
+	}
 	if update.FinalReport != nil {
 		reportJSON, _ = json.Marshal(update.FinalReport)
 	}
 
 	_, err := db.Pool.Exec(ctx,
-		`UPDATE jobs SET status = $1, satellite_images = COALESCE($2, satellite_images),
-		 crop_analysis = COALESCE($3, crop_analysis), final_report = COALESCE($4, final_report),
-		 error = COALESCE($5, error), updated_at = $6 WHERE id = $7`,
-		string(update.Status), satelliteJSON, analysisJSON, reportJSON,
-		nullableString(update.Error), time.Now(), jobID,
+		`UPDATE jobs SET status = $1,
+		 satellite_images = COALESCE($2, satellite_images),
+		 crop_analysis = COALESCE($3, crop_analysis),
+		 detected_fields = COALESCE($4, detected_fields),
+		 final_report = COALESCE($5, final_report),
+		 error = COALESCE($6, error),
+		 updated_at = $7 WHERE id = $8`,
+		string(update.Status), satelliteJSON, analysisJSON, detectedJSON,
+		reportJSON, nullableString(update.Error), time.Now(), jobID,
 	)
 	if err != nil {
 		log.Printf("failed to apply update for job %s: %v", jobID, err)

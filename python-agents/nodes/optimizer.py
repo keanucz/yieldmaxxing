@@ -1,103 +1,100 @@
-"""Optimizer/summarizer agent — takes annotated bounding boxes + analysis and produces final report."""
+"""Final planning agent — synthesizes everything into an actionable crop plan."""
 
 import json
 import os
 from pathlib import Path
 
-import anthropic
+from openai import OpenAI
 
-from graph import FarmState
+from state import FarmState
 
-_client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 _KNOWLEDGE_PATH = Path(__file__).parent.parent / "knowledge" / "corn.json"
 _CORN_KNOWLEDGE = json.loads(_KNOWLEDGE_PATH.read_text())
 
-_SYSTEM_PROMPT = f"""You are an expert agronomist producing actionable field management reports for corn farmers.
+_SYSTEM_PROMPT = f"""You are an expert agronomist producing actionable crop management plans for corn farmers.
 
-You receive:
-- Initial crop analysis with detected issues and NDVI data
-- Farmer-annotated bounding boxes marking specific problem areas on the satellite image
+You receive everything gathered about their farm:
+- A vision analysis of the crop photo they uploaded
+- Satellite NDVI statistics for the farm area
+- The specific fields they selected for analysis
 - The corn agronomic knowledge base
 
 <knowledge>
 {json.dumps(_CORN_KNOWLEDGE, indent=2)}
 </knowledge>
 
-Your job is to synthesize this into a precise, actionable report. Be specific about:
-- Which annotated zones have which issues
-- Prioritized, timed treatment recommendations
-- Estimated yield impact if untreated
-- Cost-effective intervention strategies
-
-Respond ONLY with valid JSON matching the schema in the user message."""
+Produce a precise, practical crop plan. Be specific about each selected field.
+Respond ONLY with valid JSON — no markdown."""
 
 
 async def optimizer_node(state: FarmState) -> dict:
-    analysis = state["crop_analysis"]
-    annotations = state.get("annotations", [])
+    crop_analysis = state["crop_analysis"]
     satellite = state["satellite_images"]
+    detected_fields = state.get("detected_fields", [])
+    selected_ids = state.get("selected_field_ids") or []
+
+    selected_fields = [f for f in detected_fields if f["id"] in selected_ids] if selected_ids else detected_fields
+
     ndvi = satellite["ndvi_data"]
 
-    annotations_desc = "\n".join(
-        f"- Zone '{a.get('label', f'Zone {i+1}')}': x={a['x']:.1f}%, y={a['y']:.1f}%, "
-        f"width={a['w']:.1f}%, height={a['h']:.1f}% of image"
-        for i, a in enumerate(annotations)
-    ) or "No zones annotated — treat whole field."
+    user_message = f"""Generate a crop management plan for this farm.
 
-    issues_desc = json.dumps(analysis["issues"], indent=2)
+Location: {state['location'].get('name', f"lat={state['location']['lat']}, lon={state['location']['lon']}")}
+Date range: {state['date_start']} to {state['date_end']}
 
-    user_message = f"""Generate final field optimization report.
-
-Field: {state['location'].get('name', f"lat={state['location']['lat']}, lon={state['location']['lon']}")}
-Overall health score: {analysis['health_score']}/100
-NDVI mean: {ndvi['mean']:.3f}
-
+--- Crop photo analysis ---
+Health score: {crop_analysis['health_score']}/100
+Summary: {crop_analysis['summary']}
 Detected issues:
-{issues_desc}
+{json.dumps(crop_analysis.get('issues', []), indent=2)}
 
-Farmer-annotated problem zones:
-{annotations_desc}
+--- Satellite NDVI statistics (whole farm) ---
+Mean: {ndvi['mean']:.3f}, Min: {ndvi['min']:.3f}, Max: {ndvi['max']:.3f}, Std: {ndvi['std']:.3f}
 
-Respond ONLY with this JSON (no markdown):
+--- Selected fields ---
+{json.dumps(selected_fields, indent=2)}
+
+Respond with this JSON:
 {{
-  "health_score": {analysis['health_score']},
-  "annotated_issues": [
+  "overall_health_score": 0_to_100,
+  "field_plans": [
     {{
-      "issue": {{
-        "id": "issue_id",
-        "name": "Issue name",
-        "confidence": 0.0_to_1.0,
-        "severity": "low|moderate|high",
-        "area": "zone description"
-      }},
-      "bounding_box": {{
-        "label": "Zone label",
-        "x": 0.0, "y": 0.0, "w": 0.0, "h": 0.0
-      }},
-      "area_hectares": estimated_hectares_as_number
+      "field_id": 0,
+      "ndvi_mean": 0.0,
+      "health": "excellent|good|fair|poor|critical",
+      "issues": ["list of issues"],
+      "actions": [
+        {{
+          "priority": "urgent|high|medium|low",
+          "action": "Specific action",
+          "timing": "When",
+          "estimated_cost": "$X/acre"
+        }}
+      ]
     }}
   ],
   "recommendations": [
     {{
       "priority": "urgent|high|medium|low",
-      "action": "Specific action to take",
-      "timing": "When to do it",
-      "estimated_cost": "Cost estimate e.g. $15-25/acre"
+      "action": "Farm-wide recommendation",
+      "timing": "When",
+      "estimated_cost": "$X/acre"
     }}
   ],
-  "executive_summary": "3-4 sentence summary for the farmer covering what was found, where, and what to do",
-  "estimated_yield_impact": "e.g. 10-20% yield reduction if untreated"
+  "executive_summary": "3-4 sentences summarising findings and next steps",
+  "estimated_yield_impact": "e.g. 15-25% yield reduction if untreated"
 }}"""
 
-    response = _client.messages.create(
-        model="claude-sonnet-4-6",
+    response = _client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
         max_tokens=2048,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
     )
 
-    raw = response.content[0].text.strip()
-    final_report = json.loads(raw)
-
+    final_report = json.loads(response.choices[0].message.content.strip())
     return {"final_report": final_report}

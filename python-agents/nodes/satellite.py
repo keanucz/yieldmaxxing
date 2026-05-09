@@ -14,7 +14,7 @@ from sentinelhub import (
     bbox_to_dimensions,
 )
 
-from graph import FarmState
+from state import FarmState
 
 
 def _build_config() -> SHConfig:
@@ -104,7 +104,7 @@ async def satellite_fetch_node(state: FarmState) -> dict:
         size=size,
         config=cfg,
     )
-    ndvi_array = ndvi_req.get_data()[0][:, :, 0]
+    ndvi_array = np.squeeze(ndvi_req.get_data()[0])
     valid = ndvi_array[~np.isnan(ndvi_array)]
 
     ndvi_stats = {
@@ -121,6 +121,7 @@ async def satellite_fetch_node(state: FarmState) -> dict:
     satellite_images = {
         "rgb_url": rgb_url,
         "ndvi_data": ndvi_stats,
+        "ndvi_array": ndvi_array.tolist(),  # raw 2D array for field detector
         "metadata": {
             "bbox": list(bbox.lower_left) + list(bbox.upper_right),
             "resolution_m": 10,

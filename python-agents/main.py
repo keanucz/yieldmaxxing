@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langgraph.types import Command
 
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="FarmWise Agent Service", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 # ---- request/response models ----
@@ -44,13 +46,14 @@ class RunRequest(BaseModel):
 
 class ResumeRequest(BaseModel):
     job_id: str
-    annotations: list[BoundingBox]
+    selected_field_ids: list[int]
 
 class JobStatusResponse(BaseModel):
     job_id: str
     status: str
     satellite_images: dict | None = None
     crop_analysis: dict | None = None
+    detected_fields: list | None = None
     final_report: dict | None = None
     error: str | None = None
 
@@ -76,9 +79,7 @@ async def run_pipeline(req: RunRequest):
 
     try:
         # Run until interrupt
-        result = await asyncio.to_thread(
-            graph.invoke, initial_state, thread_config
-        )
+        result = await graph.ainvoke(initial_state, thread_config)
     except Exception as e:
         return JobStatusResponse(
             job_id=req.job_id,
@@ -95,6 +96,7 @@ async def run_pipeline(req: RunRequest):
         status="awaiting_annotation",
         satellite_images=state.get("satellite_images"),
         crop_analysis=state.get("crop_analysis"),
+        detected_fields=state.get("detected_fields"),
     )
 
 
@@ -103,12 +105,9 @@ async def resume_pipeline(req: ResumeRequest):
     """Resume the graph after the farmer submits bounding box annotations."""
     thread_config = {"configurable": {"thread_id": req.job_id}}
 
-    annotations = [a.model_dump() for a in req.annotations]
-
     try:
-        result = await asyncio.to_thread(
-            graph.invoke,
-            Command(resume=annotations),
+        result = await graph.ainvoke(
+            Command(resume=req.selected_field_ids),
             thread_config,
         )
     except Exception as e:

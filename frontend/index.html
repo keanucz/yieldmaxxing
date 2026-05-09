@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CropGuard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f1a0f; color: #e2f0e2; min-height: 100vh; padding: 2rem; }
+    h1 { color: #6abf69; margin-bottom: 1.5rem; font-size: 1.6rem; }
+    h2 { color: #6abf69; font-size: 1.1rem; margin-bottom: 1rem; }
+    .card { background: #1a2e1a; border: 1px solid #2d4a2d; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; max-width: 860px; }
+    label { display: block; font-size: 0.85rem; color: #9ab99a; margin-bottom: 0.3rem; margin-top: 0.8rem; }
+    input[type=text], input[type=number] { width: 100%; padding: 0.5rem 0.7rem; background: #0f1a0f; border: 1px solid #2d4a2d; border-radius: 6px; color: #e2f0e2; font-size: 0.95rem; }
+    .row { display: flex; gap: 1rem; }
+    .row > * { flex: 1; }
+    button { margin-top: 1.2rem; padding: 0.6rem 1.4rem; background: #3a7d44; border: none; border-radius: 6px; color: #fff; font-size: 0.95rem; cursor: pointer; font-weight: 600; }
+    button:hover { background: #4a9d54; }
+    button:disabled { background: #2d4a2d; color: #6a8a6a; cursor: not-allowed; }
+    #status-bar { font-size: 0.85rem; color: #9ab99a; margin-top: 0.8rem; min-height: 1.2rem; }
+    .canvas-wrap { position: relative; display: inline-block; max-width: 100%; }
+    canvas { display: block; max-width: 100%; border-radius: 6px; cursor: crosshair; }
+    #field-list { margin-top: 0.8rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .field-chip { padding: 0.3rem 0.8rem; border-radius: 20px; background: #2d4a2d; border: 1px solid #3a7d44; cursor: pointer; font-size: 0.8rem; user-select: none; }
+    .field-chip.selected { background: #3a7d44; color: #fff; }
+    #report { white-space: pre-wrap; font-size: 0.82rem; font-family: monospace; color: #c2e0c2; }
+    .upload-label { display: inline-block; padding: 0.5rem 1rem; background: #2d4a2d; border: 1px dashed #3a7d44; border-radius: 6px; cursor: pointer; font-size: 0.85rem; color: #9ab99a; }
+    .upload-label:hover { background: #3a5a3a; }
+    #image-preview { max-width: 200px; max-height: 120px; border-radius: 6px; margin-top: 0.5rem; display: none; }
+  </style>
+</head>
+<body>
+  <h1>🌽 CropGuard</h1>
+
+  <!-- Step 1: inputs -->
+  <div class="card" id="step1">
+    <h2>Step 1 — Farm details</h2>
+    <div class="row">
+      <div>
+        <label>Latitude</label>
+        <input type="number" id="lat" step="any" value="38.5" />
+      </div>
+      <div>
+        <label>Longitude</label>
+        <input type="number" id="lon" step="any" value="-97.5" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Date start</label>
+        <input type="text" id="date-start" value="2024-07-01" />
+      </div>
+      <div>
+        <label>Date end</label>
+        <input type="text" id="date-end" value="2024-07-31" />
+      </div>
+    </div>
+    <label>Crop photo (optional)</label>
+    <label class="upload-label">
+      📷 Upload crop photo
+      <input type="file" accept="image/*" id="crop-photo" style="display:none" onchange="previewPhoto(this)" />
+    </label>
+    <img id="image-preview" />
+    <button onclick="startJob()">Analyse field</button>
+    <div id="status-bar"></div>
+  </div>
+
+  <!-- Step 2: satellite + field selection -->
+  <div class="card" id="step2" style="display:none">
+    <h2>Step 2 — Select fields to analyse</h2>
+    <div class="canvas-wrap">
+      <canvas id="map-canvas"></canvas>
+    </div>
+    <div id="field-list"></div>
+    <button onclick="submitFields()" id="submit-fields-btn">Run analysis on selected fields</button>
+    <div id="status-bar2"></div>
+  </div>
+
+  <!-- Step 3: report -->
+  <div class="card" id="step3" style="display:none">
+    <h2>Step 3 — Crop plan</h2>
+    <pre id="report"></pre>
+  </div>
+
+<script>
+const API = 'http://localhost:8001';
+let jobId = null;
+let detectedFields = [];
+let selectedIds = new Set();
+let satelliteImg = null;
+
+function setStatus(msg, el = 'status-bar') {
+  document.getElementById(el).textContent = msg;
+}
+
+function previewPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = document.getElementById('image-preview');
+    img.src = e.target.result;
+    img.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function toBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+async function startJob() {
+  const lat = parseFloat(document.getElementById('lat').value);
+  const lon = parseFloat(document.getElementById('lon').value);
+  const dateStart = document.getElementById('date-start').value;
+  const dateEnd = document.getElementById('date-end').value;
+  const photoFile = document.getElementById('crop-photo').files[0];
+
+  let cropImageBase64 = '';
+  if (photoFile) cropImageBase64 = await toBase64(photoFile);
+
+  setStatus('Submitting job...');
+  document.querySelector('#step1 button').disabled = true;
+
+  const body = {
+    job_id: Math.random().toString(36).slice(2) + Date.now().toString(36),
+    location: { lat, lon, name: `${lat},${lon}` },
+    date_start: dateStart,
+    date_end: dateEnd,
+    crop_image_base64: cropImageBase64,
+  };
+
+  jobId = body.job_id;
+
+  try {
+    setStatus('Fetching satellite imagery & analysing crop…');
+    const resp = await fetch(`${API}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+
+    if (data.error) { setStatus('Error: ' + data.error); return; }
+
+    detectedFields = data.detected_fields || [];
+    showFieldSelection(data);
+  } catch (e) {
+    setStatus('Failed to reach agent service. Is it running on :8001?');
+    document.querySelector('#step1 button').disabled = false;
+  }
+}
+
+function showFieldSelection(data) {
+  document.getElementById('step2').style.display = 'block';
+
+  // draw satellite image + field boxes
+  const canvas = document.getElementById('map-canvas');
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  img.onload = () => {
+    const maxW = 800;
+    const scale = Math.min(1, maxW / img.width);
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    satelliteImg = img;
+    drawBoxes(ctx, canvas.width, canvas.height);
+  };
+  img.src = data.satellite_images?.rgb_url || '';
+
+  // field chips
+  const list = document.getElementById('field-list');
+  list.innerHTML = '';
+  detectedFields.forEach(f => {
+    const chip = document.createElement('div');
+    chip.className = 'field-chip';
+    chip.textContent = `Field ${f.id} — NDVI ${f.ndvi_mean}`;
+    chip.dataset.id = f.id;
+    chip.onclick = () => toggleField(f.id, chip, canvas.getContext('2d'), canvas.width, canvas.height);
+    list.appendChild(chip);
+  });
+
+  if (detectedFields.length === 0) {
+    list.innerHTML = '<span style="color:#9ab99a;font-size:0.85rem">No distinct fields detected — the whole area will be analysed.</span>';
+  }
+}
+
+function toggleField(id, chip, ctx, w, h) {
+  if (selectedIds.has(id)) {
+    selectedIds.delete(id);
+    chip.classList.remove('selected');
+  } else {
+    selectedIds.add(id);
+    chip.classList.add('selected');
+  }
+  // redraw
+  if (satelliteImg) {
+    ctx.drawImage(satelliteImg, 0, 0, w, h);
+    drawBoxes(ctx, w, h);
+  }
+}
+
+function drawBoxes(ctx, w, h) {
+  detectedFields.forEach(f => {
+    const isSelected = selectedIds.has(f.id);
+    ctx.strokeStyle = isSelected ? '#6abf69' : '#ffffff88';
+    ctx.lineWidth = isSelected ? 2.5 : 1.5;
+    ctx.strokeRect(f.x * w, f.y * h, f.w * w, f.h * h);
+
+    ctx.fillStyle = isSelected ? '#6abf6944' : '#ffffff11';
+    ctx.fillRect(f.x * w, f.y * h, f.w * w, f.h * h);
+
+    ctx.fillStyle = isSelected ? '#6abf69' : '#ffffffaa';
+    ctx.font = `${Math.max(10, w * 0.013)}px system-ui`;
+    ctx.fillText(`F${f.id}`, f.x * w + 4, f.y * h + 14);
+  });
+}
+
+async function submitFields() {
+  const ids = selectedIds.size > 0
+    ? [...selectedIds]
+    : detectedFields.map(f => f.id);
+
+  setStatus('Running optimiser…', 'status-bar2');
+  document.getElementById('submit-fields-btn').disabled = true;
+
+  try {
+    const resp = await fetch(`${API}/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: jobId, selected_field_ids: ids }),
+    });
+    const data = await resp.json();
+
+    if (data.error) { setStatus('Error: ' + data.error, 'status-bar2'); return; }
+
+    document.getElementById('step3').style.display = 'block';
+    document.getElementById('report').textContent = JSON.stringify(data.final_report, null, 2);
+    setStatus('Done!', 'status-bar2');
+  } catch (e) {
+    setStatus('Failed: ' + e.message, 'status-bar2');
+    document.getElementById('submit-fields-btn').disabled = false;
+  }
+}
+</script>
+</body>
+</html>

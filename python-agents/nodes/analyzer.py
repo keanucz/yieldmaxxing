@@ -1,14 +1,14 @@
-"""Crop analyzer — uses Claude Vision on the farmer's crop photo + corn knowledge base."""
+"""Crop analyzer — uses GPT-4o Vision on the farmer's crop photo + corn knowledge base."""
 
 import json
 import os
 from pathlib import Path
 
-import anthropic
+from openai import OpenAI
 
-from graph import FarmState
+from state import FarmState
 
-_client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 _KNOWLEDGE_PATH = Path(__file__).parent.parent / "knowledge" / "corn.json"
 _CORN_KNOWLEDGE = json.loads(_KNOWLEDGE_PATH.read_text())
@@ -31,8 +31,8 @@ async def crop_analyze_node(state: FarmState) -> dict:
 
     if image_b64:
         content.append({
-            "type": "image",
-            "source": {"type": "base64", "media_type": "image/jpeg", "data": image_b64},
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
         })
 
     content.append({
@@ -60,12 +60,14 @@ Respond with this JSON:
 }}"""
     })
 
-    response = _client.messages.create(
-        model="claude-opus-4-7",
+    response = _client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": content},
+        ],
         max_tokens=1024,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": content}],
     )
 
-    parsed = json.loads(response.content[0].text.strip())
+    parsed = json.loads(response.choices[0].message.content.strip())
     return {"crop_analysis": parsed}
